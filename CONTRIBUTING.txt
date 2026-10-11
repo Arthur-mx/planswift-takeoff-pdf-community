@@ -1,0 +1,26 @@
+CONTRIBUTING
+
+Keep changes under AGPL-3.0-only and retain notices. Supply only code/artwork you
+have permission to contribute. Do not use proprietary PlanSwift code or real
+customer plans as fixtures. Read DEVELOPER_STARTER_PROMPT.txt for the architecture.
+
+Development (from extracted source, with supported Python):
+  python -m pip install -r requirements-dev.txt
+  python -m unittest discover -p "test_*.py"
+  python make_demo.py
+Tk widget tests create real windows and require an interactive Windows desktop.
+Pillow is only needed for synthetic tests/demo generation, not normal runtime.
+
+The repository includes the matching bridge TXT beside these Python files, so
+script audits run automatically. For an extracted release ZIP, put the separate
+bridge beside the package folder, or set COMMUNITY_SCRIPT to its full path.
+The source audit is skipped only when no matching bridge is available.
+
+For a bug report include release, Windows/Python/PlanSwift/PDF-reader versions,
+background mode, steps, expected/actual behavior and a minimal synthetic example.
+For PlanSwift errors include the reported line number. Logs/manifests may contain
+client names, file paths and takeoff descriptions: sanitize them before sharing.
+
+Do not flatten saved PDF layers while fixing layout. Prefer small changes and
+regression checks. Update both sides if a manifest or picker protocol changes.
+Do not commit runtime/, __pycache__/, preferences, generated jobs or private data.

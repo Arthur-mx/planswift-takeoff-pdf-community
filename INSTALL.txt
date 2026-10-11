@@ -1,0 +1,81 @@
+INSTALL TAKEOFF PDF COMMUNITY 1.0.1
+
+REQUIREMENTS
+- Windows with a licensed PlanSwift installation and access to its plugin tools.
+- 64-bit Python 3.10-3.13, including pip and Tcl/Tk. Python 3.13 was used for
+  validation. Download Python from https://www.python.org/downloads/windows/ .
+  Include the launcher and Tcl/Tk options during installation.
+- Internet access during installation to obtain PyMuPDF 1.26.3 from PyPI.
+- A desktop PDF reader with optional-content/layer-action support for the
+  interactive legend. Revu and PDF-XChange worked in the existing user's tests.
+
+NORMAL INSTALLATION
+1. Download the ZIP and the matching SwiftPluginPackage. Keep the separate
+   PlanSwift Script TXT if you want to review or customize the source.
+2. Extract ALL files from the ZIP. Do not run from inside the ZIP preview.
+3. Close an already-open export or preview window. Double-click Install.cmd.
+   It prefers Python 3.13, then checks another supported Python installation.
+   It creates a dedicated environment, installs the pinned PDF engine and checks
+   that the PDF and Tk modules load. Wait for "Installation complete."
+   Administrator access is normally unnecessary.
+4. In PlanSwift use the Plugins tab's Import Plugin Package command and import
+   the matching SwiftPluginPackage. Exact menu labels vary by version.
+5. Open a small COPY of a job, run Takeoff PDF Community and choose Preview PDF.
+   Check page totals, units, alignment, legend placement and page order. Save a
+   test PDF and try its eye controls and description highlights in your reader.
+
+INSTALL LOCATION
+%LOCALAPPDATA%\PlanSwift\Takeoff PDF Community
+The script finds this folder automatically for each Windows account. Install
+under the same Windows user that runs PlanSwift. Do not edit paths in the script.
+The runtime is in runtime\Scripts\python.exe. Preferences are in preferences.json;
+remembered export folders are in export_folders.txt. No elevation is required
+just to place these files, although company policies may require IT assistance.
+
+BUILDING YOUR OWN PLUGIN (IF NO SwiftPluginPackage IS PROVIDED)
+Create a new, separate plugin item using PlanSwift's plugin authoring tools.
+Paste the ENTIRE separate PlanSwift Script TXT into its Pascal Script Code event,
+replacing the editor contents. Copy from the plain TXT, never from a diff view
+with removed lines. Use the normal click/execute event for the plugin command.
+The script requires no custom Source/Building fields, embedded image properties,
+FolderLocation property on the plugin, or additional icon-extractor utility.
+You can use assets/print_flag.png as the command icon. Export settings and package
+metadata are in PLUGIN_EXPORT_FIELDS.txt. Exact authoring steps depend on the
+PlanSwift version and must be verified by the package maintainer.
+
+UPDATING
+Close export/preview windows. Extract a new release, rerun Install.cmd and import
+its matching SwiftPluginPackage when the script changes. Only shipped Python and
+asset files are overwritten; preferences and remembered folders are retained.
+Keep the ZIP and script versions together. Reinstalling updates the dedicated
+PDF dependency to the version pinned by that release.
+
+UNINSTALLING
+Remove the community plugin through PlanSwift. After closing its windows, remove
+ONLY the folder listed above if you also want to remove its runtime/preferences.
+Exported PDFs and PlanSwift jobs are outside that folder and are not removed.
+Saved Print flags on project pages remain until you clear them in the form.
+
+TROUBLESHOOTING
+"Install first": check the Windows account and installation path above.
+"No module named fitz": rerun Install.cmd; do not install the unrelated package
+named "fitz". The dependency is named PyMuPDF.
+Missing tkinter: repair/install Python with Tcl/Tk support.
+Python not found: install supported 64-bit Python, then rerun Install.cmd.
+Company network blocks pip: ask IT to provide the pinned PyMuPDF wheel. This ZIP
+contains source, not an offline copy of Python or third-party binary wheels.
+Blank/missing raster page: verify PlanSwift can open it and that its TIFF and
+Data.xml are accessible. Network job storage must be available to your account.
+Wrong source matching/alignment: see USER_GUIDE.txt; do not use a different
+revision, crop or orientation. Source PDF mode still needs PlanSwift's TIFF.
+Preview/Save cannot overwrite a PDF: close that PDF in its reader, or use a new name.
+A PlanSwift syntax error: copy the full plain script again and report the line
+number plus your exact PlanSwift version. Host compilation remains version-specific.
+
+Official import overview:
+https://www.planswift.com/pdf/General%20Contractor%20Starter%20Pack.pdf
+
+UPGRADING TO 1.0.1
+Run Install.cmd from this ZIP, then use the matching complete PlanSwift Script
+TXT in your separate community plugin. Do not mix the 1.0.1 bridge with 1.0.0
+Python helpers. Saved user preferences are retained by the installer.

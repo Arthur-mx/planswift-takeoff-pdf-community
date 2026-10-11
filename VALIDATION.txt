@@ -1,0 +1,43 @@
+VALIDATION - COMMUNITY 1.0.1
+
+Passed 145 automated tests on Windows with Python 3.13 and PyMuPDF 1.26.3.
+This includes nine new section-record tests: allocation across pages, retained
+first-seen order, merged geometry/subtracts, filtered shares, Count units,
+decimal separators, zero/negative values, malformed inputs and inconsistent
+item metadata. A two-page raw-record export matches an equivalent grouped export
+in rendered pixels, searchable text, layer properties and annotation references.
+
+Existing tests cover source matching/labels, legends, layer visibility and
+highlight actions, multiplier placement, picker controls, preview order/removal/
+history/view preferences, community installation paths and source exclusions.
+A static bridge check confirms removal of named inherited routines/variables,
+presence of the raw-section protocol and use of parent Qty and Qty.inputUnits.
+Static checks do not compile Pascal or certify the embedded engine.
+
+The installer was run against a fresh isolated folder. It created its own virtual
+environment and installed pinned PyMuPDF 1.26.3. Using only this installed runtime,
+all seven runtime modules imported, Tk initialized, and a raw-section manifest
+rendered successfully with a searchable 500 LN FT quantity and native layer
+visibility/highlight actions. No changes were made to the normal installation.
+
+The synthetic demo generator now uses SectionRecordsV1. Both regenerated pages
+have exactly the same rendered pixels, text and layer properties as the previously
+visually checked 1.0.0 demo. No real job drawing was used.
+
+All Python sources parsed successfully. Personal working-file hashes were checked
+against the pre-review baseline. The archive excludes original plugin references,
+the separately delivered bridge TXT, temporary runtimes, settings, logs, cached
+bytecode and client drawings. See SOURCE_REVIEW.txt for provenance-review scope.
+
+NOT YET VERIFIED: PLANSwift HOST ACCEPTANCE
+The rewritten Pascal bridge has not been compiled/run inside PlanSwift. Before
+publishing, create the separate community plugin using the ENTIRE matching TXT,
+reinstall helpers, then test a copy of a small job:
+- Nested takeoff/page folders; select pages in a non-default order.
+- Area, Linear, Count and Wall Area, including calculated Count Qty in LN FT/SQ FT.
+- One parent spanning pages, multiple sections on one page and hidden sections.
+- Area subtracts, hatch patterns and count symbols; drawing-only and empty pages.
+- Existing and automatic legend placement; layer eyes, highlights and Hide/Show all.
+- Print flags on Cancel, source/raster backgrounds, Preview/Back and reordered saves.
+Then test importing the SwiftPluginPackage in another Windows account or machine
+and record exact PlanSwift/PDF-reader versions. Python tests cannot replace this.

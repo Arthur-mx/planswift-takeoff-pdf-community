@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+runtime/
+preferences.json
+export_folders.txt
+*.manifest.txt
+*.report.txt
+tmp/
+
+.env
+.env.*
+*.log
+backup*/
+output/
+.vscode/
+.idea/

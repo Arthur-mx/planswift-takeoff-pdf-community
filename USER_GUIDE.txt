@@ -1,0 +1,95 @@
+USING TAKEOFF PDF COMMUNITY
+
+CHOOSE AND ORDER PAGES
+Check pages or folders in the tree; search to find sheets quickly. The selected
+pages panel is the final PDF order. Drag several selected pages together, use the
+order buttons or Restore default order. Drawing only exports the background;
+Visible items and All items determine the takeoff content. Legend and greyscale
+are optional. Greyscale affects the drawing background, not takeoff colors.
+
+PRINT FLAGS
+A Print flag is a saved shortcut for future exports, separate from the current
+checkbox selection. Click the Print column to flag/unflag, use Print flags for
+batch changes or clear all, or hold Ctrl while launching the plugin to toggle
+the current page. Flag edits are saved even when cancelling export. Community
+printer/page icons are used in the page tree; clearing a flag uses the supplied
+generic page icon rather than restoring a prior custom icon.
+
+PREVIEW
+Preview PDF builds the actual export. Switch Thumbnails/List beside PDF order;
+the choice is remembered per Windows account. Ctrl-click adds/removes a page
+from the selection, Shift-click selects a range and Ctrl+A selects all.
+Drag a selection to the blue line or use Top/Up/Down/Bottom. Remove selected
+pages (or Delete) removes them only from this export. Undo/Ctrl+Z and Redo/Ctrl+Y
+cover order and removal, with up to 50 edits per open preview. Separate legend
+pages stay with their drawing. Restore default order sorts remaining pages; it
+does not restore removed pages. An empty selection disables Save PDF.
+Back to print window retains the remaining pages/order; it does not carry over
+the preview's Undo history after the preview window closes. Save PDF uses the
+pages/order shown. View choices never change the output PDF's content.
+
+INTERACTIVE LEGEND IN THE SAVED PDF
+- Eye icon: show/hide that takeoff item's PDF layer. An item's layer is shared
+  across its occurrences in this export, so its visibility can affect other pages.
+- Description: reveal the item and toggle its selection-style outline and point
+  handles on this drawing; another selection on that drawing is cleared.
+- Hide all / Show all: affect takeoff layers throughout this PDF and clear highlights.
+- Clear highlight: clear highlights for this drawing.
+The base drawing, legend text, dimensions and notes are not takeoff items.
+Selection layers appear in the reader's Layers panel; they are initially off.
+These controls use native PDF layer actions, not PDF JavaScript. The highlight
+is a visual aid, not editable PlanSwift geometry or a way to change quantities.
+Viewer support varies. Saved legend text is searchable even on raster backgrounds;
+the underlying raster drawing does not gain OCR or searchable drawing text.
+
+QUANTITIES AND FORMATTING
+For each item/page the legend uses the parent's calculated Qty multiplied by
+the sum of that page's section Takeoff % fractions. Units come from Qty.inputUnits,
+so a Count may correctly display LN FT or SQ FT. The legend currently rounds
+quantities UP to whole units (111.01 becomes 112); raw values remain in the export
+calculation. Zero page totals are omitted. This inherited formatting choice is
+an explicit customization point in ceil_qty_str, not a precision guarantee.
+The page multiplier badge displays the page's Multiplier property (default 1).
+It does not multiply an already-calculated Qty again in the PDF builder.
+
+LEGEND PLACEMENT
+A PlanSwift page item named exactly Legend supplies the desired box location.
+Otherwise the exporter tries the strip right of the outermost tracing. For up
+to five entries wholly above or below the page midpoint, it can widen the top-
+right legend to fit 12-point text if it does not overlap the traced geometry.
+Text shrinks for long descriptions instead of adding rows. When the right-hand
+space cannot fit a legend, a companion legend page is inserted after the drawing.
+The multiplier badge moves when needed to avoid the legend or takeoff geometry.
+These checks use exported tracing bounds, not recognition of all printed lines,
+notes or building footprints. Use a PlanSwift Legend box for exact placement.
+
+SOURCE PDF SETUP
+Raster uses PlanSwift's imported TIFF and needs no original source files.
+Source PDF preserves original vector drawing content and existing text when
+available; it cannot turn a scan into vector text. Choose a source PROJECT ROOT,
+independently of the output folder. Match the Pages panel hierarchy, for example:
+  Project root\Plans & Docs\2026-01-01\Permit set\A-101.pdf
+PlanSwift page: A-101 | First floor. With individual files, keep one page per PDF
+and name it by sheet ID. Leading duplicate * markers and text after | are ignored
+when matching. Exact names are preferred; ambiguous matches are rejected.
+
+For a combined drawing set, enable Match drawing sets by page labels. It requires
+actual PDF page labels matching sheet IDs, not just bookmarks or printed titles.
+Use Check PDF labels to inspect them. Keep the set in the matching folder, or
+beside the matching document folder with that folder's name. Alternate revisions
+must be separated. Check selected pages before export. Missing, ambiguous,
+password-protected or inconsistent sources must be fixed; no silent raster fallback.
+Keep the same revision, crop and orientation imported into PlanSwift. The TIFF
+is STILL REQUIRED to size/align overlays. Matching aspect ratios alone cannot
+prove content/revision alignment, so visually check the preview.
+
+LIMITS AND DIAGNOSTICS
+This is not Print current View. It exports full selected sheets. Fonts, hatches,
+symbols and note styles may not reproduce every PlanSwift template identically.
+Dimension labels use the current feet/inches formatter; metric annotations need
+additional validation even when Qty units themselves are preserved correctly.
+Complete exports remove manifest/report sidecars. Incomplete direct raster
+exports can retain diagnostics and report skipped pages; preview uses strict
+checks and stops rather than silently delivering a partial export. An abrupt
+process crash can leave private temporary files. Do not share manifests from
+real jobs publicly: they may contain project names, local paths and item text.

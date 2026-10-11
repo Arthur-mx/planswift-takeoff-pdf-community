@@ -1,0 +1,1102 @@
+﻿// =============================================================================
+// PlanSwift Script: Export Takeoff To PDF (manifest writer + Python launcher)
+// Community edition 1.0.1 - SPDX-License-Identifier: AGPL-3.0-only
+// Pair:   pdf_export_picker.py (window), pdf_takeoff_builder.py (PDF renderer)
+//
+// Flow:   1. Launch the external page tree/search window; choose PDF content
+//         2. Pick the output PDF path (manifest written next to it)
+//         3. Script writes a line-based manifest: pages -> items -> sections
+//            (DigitizerData raw, item Color as PlanSwift decimal TColor,
+//             page ScaleX/ScaleY, Folder Path, clean SheetID split on '|')
+//         4. Launches:  python "<builder>" "<manifest>"
+//
+// Requires: run Install.cmd from the matching community ZIP before use.
+// =============================================================================
+
+var
+  // The external Python window owns all page-tree controls.
+  ExportDrawingOnly, ExportAllItems, ExportWithLegend: Boolean;
+  ExportGreyscale, ExportSourcePDF, ExportPDFLabels: Boolean;
+  VisibleTakeoffPages, AllTakeoffPages, CatalogPages: TStringList;
+  pickerMarkIDs, pickerMarkValues: TStringList;
+  PickerMarksOnly, PickerPreview: Boolean;
+  previewPath, pickerStatePath, pickerStateDir: String;
+  PickerReturnToPrint: Boolean;
+  pickerPreviewExit: Integer;
+  pickerFSO, pickerStream: Variant;
+  pickerPath, pickerTempDir, pickerSession: String;
+  pickerRequest, pickerResponse: String;
+  pickerSourceRootJSON: String;
+  pickerNodeCount: Integer;
+
+  // Per-user installation paths (initialized in MAIN)                 
+  installRoot: String;
+  pythonExe: String;
+  builderPath: String;
+  settingsPath: String;
+  lastSaveDir: String;
+  lastSrcDir: String;
+
+  // Community inventory and accepted page order.
+  JobRoot, PageRoot, MeasureRoot: String;
+  AcceptedSheets, TraceCatalog, TracePageIds: TStringList;
+  anchorCacheGuid, anchorCachePath: TStringList;
+  legendDigitizer: String;
+  flagWasSet: Boolean;
+  exportedSheets, exportedRecords: Integer;
+
+  // Manifest file
+  manifestFile: TextFile;
+  manifestPath, outputPDF: String;
+
+  // Launch
+  shellObj: Variant;
+  runCmd: String;
+
+  // Export destination folder: project root containing Plans & Docs.
+  srcPdfDir: String;
+
+  // Ctrl+run "mark page for printing" toggle
+  ctrlPageGUID: String;
+  markIconPath: String;
+  origIconPath: String;
+
+  // Legend type icons (bundled community artwork), emitted in the
+  // manifest header so the Python builder can draw a per-type icon per row.
+  legIconArea, legIconLinear, legIconCount, legIconWall: String;
+
+// Win32 key-state probe — used to detect Ctrl held down at launch (VK 17).
+// NOTE: external DLL declarations must come AFTER the var block in this engine.
+function GetAsyncKeyState(virtualKeyCode: Integer): Integer; stdcall; external 'User32.dll';
+
+// The embedded engine only serializes pages and reads simple text choices.
+// UTF-16 preserves folder names; response paths use ASCII-safe JSON escaping.
+function PickerLine(value: String): String;
+var
+  charIndex: Integer;
+begin
+  Result := '';
+  for charIndex := 1 to Length(value) do begin
+    if (value[charIndex] = #13) or (value[charIndex] = #10) then
+      Result := Result + ' '
+    else
+      Result := Result + value[charIndex];
+  end;
+end;
+
+procedure WritePickerFlag(value: Boolean);
+begin
+  if value then pickerStream.WriteLine('1') else pickerStream.WriteLine('0');
+end;
+
+procedure WritePickerBranch(AItem: String; ParentIndex: Integer);
+var
+  nodeIndex, childIndex: Integer;
+  nodeGUID, nodeName: String;
+  nodeIsPage: Boolean;
+begin
+  nodeIndex := pickerNodeCount;
+  pickerNodeCount := pickerNodeCount + 1;
+  nodeGUID := GetResultAsString(AItem, 'GUID');
+  nodeName := GetResultAsString(AItem, 'Name');
+  nodeIsPage := GetResultAsBoolean(AItem, 'isPage', False);
+  pickerStream.WriteLine('NODE');
+  pickerStream.WriteLine(nodeGUID);
+  pickerStream.WriteLine(IntToStr(ParentIndex));
+  if nodeIsPage then pickerStream.WriteLine('PAGE') else pickerStream.WriteLine('FOLDER');
+  pickerStream.WriteLine(PickerLine(nodeName));
+  WritePickerFlag(VisibleTakeoffPages.IndexOf(nodeGUID) >= 0);
+  WritePickerFlag(AllTakeoffPages.IndexOf(nodeGUID) >= 0);
+  WritePickerFlag(GetResultAsBoolean(AItem, 'Print Page', False));
+  if nodeIsPage then
+    pickerStream.WriteLine(PickerLine(GetResultAsString(AItem, 'TakeoffPath')))
+  else
+    pickerStream.WriteLine('');
+  if nodeIsPage then
+    CatalogPages.Add(nodeGUID)
+  else
+    for childIndex := 0 to ChildCount(AItem) - 1 do
+      WritePickerBranch(ChildItem(AItem, childIndex), nodeIndex);
+end;
+
+procedure CleanupPickerFiles;
+var
+  pickerFolder: Variant;
+begin
+  // Only our exact request/response files in this run's private temp folder.
+  // Delete the folder only when empty; never recurse through unrelated files.
+  try
+    if pickerFSO.FileExists(pickerRequest) then pickerFSO.DeleteFile(pickerRequest, True);
+    if pickerFSO.FileExists(pickerResponse) then pickerFSO.DeleteFile(pickerResponse, True);
+    pickerFolder := pickerFSO.GetFolder(pickerTempDir);
+    if (pickerFolder.Files.Count = 0) and (pickerFolder.SubFolders.Count = 0) then
+      pickerFSO.DeleteFolder(pickerTempDir, True);
+  except
+    // Temporary-file cleanup does not invalidate the user's choices.
+  end;
+end;
+
+function RunExternalPicker: Boolean;
+var
+  pickerShell, pickerTempFolder: Variant;
+  responseLines, chosenPages: TStringList;
+  responseIndex, exitCode, marksIndex: Integer;
+  responseValid, streamOpen: Boolean;
+  pickerCommand, responseGUID: String;
+begin
+  Result := False;
+  pickerPath := ExtractFilePath(builderPath) + 'pdf_export_picker.py';
+  if not FileExists(pickerPath) then begin
+    ShowMessage('The PDF export window is missing:' + #13#10 + pickerPath);
+    Exit;
+  end;
+  responseLines := TStringList.Create;
+  chosenPages := TStringList.Create;
+  streamOpen := False;
+  pickerTempDir := '';
+  try
+    pickerFSO := CreateOleObject('Scripting.FileSystemObject');
+    pickerSession := VarToStr(pickerFSO.GetTempName);
+    pickerTempFolder := pickerFSO.GetSpecialFolder(2);
+    pickerTempDir := VarToStr(pickerTempFolder.Path) + '\PS_PDF_' + pickerSession;
+    pickerFSO.CreateFolder(pickerTempDir);
+    pickerRequest := pickerTempDir + '\request.txt';
+    pickerResponse := pickerTempDir + '\result.txt';
+    pickerStream := pickerFSO.CreateTextFile(pickerRequest, True, True);
+    streamOpen := True;
+    pickerStream.WriteLine('PDF_EXPORT_PICKER_REQUEST_V2');
+    pickerStream.WriteLine(pickerSession);
+    pickerStream.WriteLine(PickerLine(GetResultAsString(JobRoot, 'Name')));
+    pickerStream.WriteLine(SelectedPage);
+    pickerNodeCount := 0;
+    WritePickerBranch(PageRoot, -1);
+    pickerStream.WriteLine('END');
+    pickerStream.Close;
+    streamOpen := False;
+    // Synchronous wait: the manifest is not collected until the user accepts.
+    // Launch directly (no command shell); quoted paths may contain spaces.
+    pickerShell := CreateOleObject('WScript.Shell');
+    pickerCommand := '"' + pythonExe + '" "' + pickerPath + '" "' +
+                     pickerRequest + '" "' + pickerResponse + '" --state "' + pickerStatePath + '"';
+    exitCode := pickerShell.Run(pickerCommand, 0, True);
+    if exitCode = 2 then
+      CleanupPickerFiles
+    else if (exitCode <> 0) or (not FileExists(pickerResponse)) then begin
+      ShowMessage('The PDF export window could not complete. No export was started.' +
+                  #13#10 + 'Check Python and pdf_export_picker.py.' +
+                  #13#10 + 'Diagnostic folder: ' + pickerTempDir);
+    end else begin
+      responseLines.LoadFromFile(pickerResponse);
+      responseValid := False;
+      if responseLines.Count >= 11 then begin
+        responseValid := True;
+        if responseLines.Strings[0] <> 'PDF_EXPORT_PICKER_RESULT_V4' then responseValid := False;
+        if responseLines.Strings[1] <> pickerSession then responseValid := False;
+        if responseLines.Strings[responseLines.Count - 1] <> 'END' then responseValid := False;
+        if (responseLines.Strings[2] <> 'VISIBLE') and
+           (responseLines.Strings[2] <> 'ALL') and
+           (responseLines.Strings[2] <> 'DRAWING') then responseValid := False;
+        if (responseLines.Strings[3] <> '0') and (responseLines.Strings[3] <> '1') then responseValid := False;
+        if (responseLines.Strings[4] <> '0') and (responseLines.Strings[4] <> '1') then responseValid := False;
+        if (responseLines.Strings[5] <> 'RASTER') and
+           (responseLines.Strings[5] <> 'PDF') and
+           (responseLines.Strings[5] <> 'PDF_LABELS') then responseValid := False;
+        if (responseLines.Strings[6] <> 'EXPORT') and
+           (responseLines.Strings[6] <> 'PREVIEW') and
+           (responseLines.Strings[6] <> 'MARKS_ONLY') then responseValid := False;
+        if Copy(responseLines.Strings[7], 1, 1) <> '"' then responseValid := False;
+        if responseLines.Strings[8] <> 'PAGES' then responseValid := False;
+        marksIndex := responseLines.IndexOf('MARKS');
+        if (marksIndex < 9) or (marksIndex >= responseLines.Count - 1) then
+          responseValid := False
+        else begin
+          for responseIndex := 9 to marksIndex - 1 do begin
+            responseGUID := responseLines.Strings[responseIndex];
+            if CatalogPages.IndexOf(responseGUID) < 0 then responseValid := False;
+            if chosenPages.IndexOf(responseGUID) >= 0 then responseValid := False;
+            chosenPages.Add(responseGUID);
+          end;
+          if (chosenPages.Count = 0) and (responseLines.Strings[6] <> 'MARKS_ONLY') then
+            responseValid := False;
+          if (responseLines.Count - marksIndex - 2) mod 2 <> 0 then
+            responseValid := False
+          else begin
+            responseIndex := marksIndex + 1;
+            while responseIndex < responseLines.Count - 1 do begin
+              responseGUID := responseLines.Strings[responseIndex];
+              if CatalogPages.IndexOf(responseGUID) < 0 then responseValid := False;
+              if pickerMarkIDs.IndexOf(responseGUID) >= 0 then responseValid := False;
+              if (responseLines.Strings[responseIndex + 1] <> '0') and
+                 (responseLines.Strings[responseIndex + 1] <> '1') then responseValid := False;
+              pickerMarkIDs.Add(responseGUID);
+              pickerMarkValues.Add(responseLines.Strings[responseIndex + 1]);
+              responseIndex := responseIndex + 2;
+            end;
+          end;
+        end;
+      end;
+      if responseValid then begin
+        ExportDrawingOnly := responseLines.Strings[2] = 'DRAWING';
+        ExportAllItems := responseLines.Strings[2] = 'ALL';
+        ExportWithLegend := responseLines.Strings[3] = '1';
+        if ExportDrawingOnly then ExportWithLegend := False;
+        ExportGreyscale := responseLines.Strings[4] = '1';
+        ExportSourcePDF := responseLines.Strings[5] = 'PDF';
+        ExportPDFLabels := responseLines.Strings[5] = 'PDF_LABELS';
+        if ExportPDFLabels then ExportSourcePDF := True;
+        PickerMarksOnly := responseLines.Strings[6] = 'MARKS_ONLY';
+        PickerPreview := responseLines.Strings[6] = 'PREVIEW';
+        // JSON keeps Unicode paths ASCII-safe for this engine's TStringList.
+        // Python validates and decodes the folder before reading any sources.
+        pickerSourceRootJSON := responseLines.Strings[7];
+        // GUIDs have been validated above. Preserve the order from the picker.
+        for responseIndex := 0 to chosenPages.Count - 1 do
+          AcceptedSheets.Add(chosenPages.Strings[responseIndex]);
+        Result := True;
+        CleanupPickerFiles;
+      end else
+        ShowMessage('The page choices could not be verified. No export was started.' +
+                    #13#10 + 'Diagnostic folder: ' + pickerTempDir);
+    end;
+  except
+    if streamOpen then begin
+      try
+        pickerStream.Close;
+      except
+      end;
+    end;
+    ShowMessage('Could not open the external PDF export window. No export was started.' +
+                #13#10 + 'Python: ' + pythonExe + #13#10 +
+                'Window: ' + pickerPath + #13#10 + 'Diagnostic folder: ' + pickerTempDir);
+  end;
+  responseLines.Free;
+  chosenPages.Free;
+end;
+
+// Load last-used Save dir and Source dir from a small settings file.
+// Format: two lines — line1 = save dir, line2 = source dir.
+procedure LoadSettings;
+var
+  slList : TStringList;
+begin
+  lastSaveDir := '';
+  lastSrcDir  := '';
+  if not FileExists(settingsPath) then Exit;
+  slList := TStringList.Create;
+  try
+    slList.LoadFromFile(settingsPath);
+    if slList.Count > 0 then lastSaveDir := Trim(slList.Strings[0]);
+    if slList.Count > 1 then lastSrcDir  := Trim(slList.Strings[1]);
+  except
+    lastSaveDir := '';
+    lastSrcDir  := '';
+  End;
+  slList.Free;
+end;
+
+procedure SaveSettings;
+var
+  slList : TStringList;
+begin
+  slList := TStringList.Create;
+  try
+    slList.Add(lastSaveDir);
+    slList.Add(lastSrcDir);
+    slList.SaveToFile(settingsPath);
+  except
+    // best-effort; ignore failures
+  End;
+  slList.Free;
+end;
+
+procedure WriteM(text: String);
+begin
+  WriteLn(manifestFile, text);
+end;
+
+
+// Traverse the takeoff hierarchy without the original plugin's recursive
+// collector. Insert children after the cursor to preserve tree order.
+procedure IndexProjectTraces;
+var
+  traceQueue: TStringList;
+  queueCursor, childOffset: Integer;
+  nodePath, attachedSheet: String;
+begin
+  if MeasureRoot = '' then Exit;
+  traceQueue := TStringList.Create;
+  try
+    traceQueue.Add(MeasureRoot);
+    queueCursor := 0;
+    while queueCursor < traceQueue.Count do begin
+      nodePath := traceQueue.Strings[queueCursor];
+      queueCursor := queueCursor + 1;
+      if GetResultAsBoolean(nodePath, 'isSection', False) then begin
+        attachedSheet := GetResultAsString(nodePath, 'PageGUID', '');
+        if attachedSheet <> '' then begin
+          TraceCatalog.Add(nodePath);
+          TracePageIds.Add(attachedSheet);
+          if AllTakeoffPages.IndexOf(attachedSheet) < 0 then
+            AllTakeoffPages.Add(attachedSheet);
+          if GetResultAsBoolean(nodePath, 'Visible', False) then
+            if VisibleTakeoffPages.IndexOf(attachedSheet) < 0 then
+              VisibleTakeoffPages.Add(attachedSheet);
+        end;
+      end else begin
+        childOffset := ChildCount(nodePath);
+        while childOffset > 0 do begin
+          childOffset := childOffset - 1;
+          traceQueue.Insert(queueCursor, ChildItem(nodePath, childOffset));
+        end;
+      end;
+    end;
+  finally
+    traceQueue.Free;
+  end;
+end;
+
+// ---------------------------------------------------------------------------
+// Find the page's Legend box DigitizerData. PlanSwift stores the legend as a
+// child item of type 'Legend'; if the user has several they're named Legend,
+// Legend1, Legend2... — we use the one named exactly 'Legend'. Returns '' if
+// none. Writes result into global legendDigitizer.
+// ---------------------------------------------------------------------------
+procedure FindLegendData(pgGUID: String);
+var
+  li    : Integer;
+  lch   : String;
+  lname : String;
+begin
+  legendDigitizer := '';
+  For li := 0 to ChildCount(pgGUID) - 1 do begin
+    lch := ChildItem(pgGUID, li);
+    if lch = '' then continue;
+    if IsType(lch, 'Legend') then begin
+      lname := Trim(GetResultAsString(lch, 'Name'));
+      if lname = 'Legend' then begin
+        legendDigitizer := GetPropertyFormula(lch, 'DigitizerData');
+        Exit;
+      end;
+    end;
+  End;
+end;
+
+// ---------------------------------------------------------------------------
+// Emit the DIMENSION blocks for a page. Dimensions are CHILD items of the page
+// (same place as the Legend box), of type 'Dimension' — so we walk the page's
+// children directly (no PageGUID matching, and they are not sections). The
+// endpoints are in DigitizerData (multi-line -> GetPropertyFormula); the value
+// is computed on the Python side from the geometry + ScaleX/ScaleY, so only the
+// geometry and styling are emitted. Empty/missing style props are fine — the
+// builder falls back to sensible defaults. Harmless when a page has none.
+// NOTE: the style property NAMES below are best-guess (we could not probe a
+// Dimension under \Job\Pages); a wrong name just reads '' and the builder uses
+// a default. DigitizerData and Color are the high-confidence ones.
+// ---------------------------------------------------------------------------
+procedure EmitDimensions(pgGUID: String);
+var
+  li  : Integer;
+  dch : String;
+  dd  : String;
+begin
+  For li := 0 to ChildCount(pgGUID) - 1 do begin
+    dch := ChildItem(pgGUID, li);
+    if dch = '' then continue;
+    if IsType(dch, 'Dimension') then begin
+      dd := GetPropertyFormula(dch, 'DigitizerData');
+      if dd = '' then continue;
+      WriteM('--- DIMENSION_START ---');
+      WriteM('DimGUID: ' + GetResultAsString(dch, 'GUID'));
+      WriteM('Color: ' + Trim(VarToStr(GetPropertyResult(dch, 'Color'))));
+      WriteM('TextColor: ' + Trim(VarToStr(GetPropertyResult(dch, 'Text Color'))));
+      WriteM('FontName: ' + Trim(VarToStr(GetPropertyResult(dch, 'Font Name'))));
+      WriteM('TextHeight: ' + Trim(VarToStr(GetPropertyResult(dch, 'Text Height'))));
+      WriteM('Precision: ' + Trim(VarToStr(GetPropertyResult(dch, 'Precision'))));
+      WriteM('Arrowheads: ' + Trim(VarToStr(GetPropertyResult(dch, 'Arrowheads'))));
+      WriteM('Fractions: ' + Trim(VarToStr(GetPropertyResult(dch, 'Fractions'))));
+      WriteM('Inches: ' + Trim(VarToStr(GetPropertyResult(dch, 'Inches'))));
+      WriteM('Dashes: ' + Trim(VarToStr(GetPropertyResult(dch, 'Dashes'))));
+      WriteM('DigitizerData:');
+      WriteM(dd);
+      WriteM('--- DIMENSION_END ---');
+    end;
+  End;
+end;
+
+// ---------------------------------------------------------------------------
+// Emit the HIGHLIGHTER blocks for a page. Highlighters are CHILD items of the
+// page (same place as the Legend box and Dimensions), of type 'Highlighter'.
+// Two modes: 'Highlighter Mode' = Solid (a filled box, 'Box Mode' = 4 Point) or
+// Line (a thick round-capped stroke, 'Box Mode' = None; 'Line Width' px is the
+// thickness). Geometry is in DigitizerData (multi-line -> GetPropertyFormula);
+// 'Transparency' is the opacity (0-255). Property names are taken directly from
+// the PlanSwift Advanced grid, so they are exact (unlike the Dimension guesses).
+// ---------------------------------------------------------------------------
+procedure EmitHighlighters(pgGUID: String);
+var
+  li  : Integer;
+  hch : String;
+  hd  : String;
+begin
+  For li := 0 to ChildCount(pgGUID) - 1 do begin
+    hch := ChildItem(pgGUID, li);
+    if hch = '' then continue;
+    if IsType(hch, 'Highlighter') then begin
+      hd := GetPropertyFormula(hch, 'DigitizerData');
+      if hd = '' then continue;
+      WriteM('--- HIGHLIGHTER_START ---');
+      WriteM('HiliteGUID: ' + GetResultAsString(hch, 'GUID'));
+      WriteM('Color: ' + Trim(VarToStr(GetPropertyResult(hch, 'Color'))));
+      WriteM('Transparency: ' + Trim(VarToStr(GetPropertyResult(hch, 'Transparency'))));
+      WriteM('LineWidth: ' + Trim(VarToStr(GetPropertyResult(hch, 'Line Width'))));
+      WriteM('HighlighterMode: ' + Trim(VarToStr(GetPropertyResult(hch, 'Highlighter Mode'))));
+      WriteM('BoxMode: ' + Trim(VarToStr(GetPropertyResult(hch, 'Box Mode'))));
+      WriteM('Visible: ' + Trim(VarToStr(GetPropertyResult(hch, 'Visible'))));
+      WriteM('DigitizerData:');
+      WriteM(hd);
+      WriteM('--- HIGHLIGHTER_END ---');
+    end;
+  End;
+end;
+
+// ---------------------------------------------------------------------------
+// Encode a (possibly multi-line) string into one manifest line by replacing
+// CR/LF/CRLF with the token [[NL]] (the builder splits it back). Keeps the
+// line-based manifest intact for a Note's Text. No StringReplace dependency.
+// ---------------------------------------------------------------------------
+function EncodeNewlines(s: String): String;
+var
+  i, n : Integer;
+  r    : String;
+begin
+  r := '';
+  i := 1;
+  n := Length(s);
+  while i <= n do begin
+    if s[i] = #13 then begin
+      r := r + '[[NL]]';
+      if (i < n) and (s[i + 1] = #10) then i := i + 1;
+    end
+    else if s[i] = #10 then r := r + '[[NL]]'
+    else r := r + s[i];
+    i := i + 1;
+  end;
+  Result := r;
+end;
+
+// ---------------------------------------------------------------------------
+// Emit the NOTE blocks for a page. Notes are CHILD items of the page (like the
+// Legend box, Dimensions and Highlighters), of type 'Note': a filled + bordered
+// box (Color / Border Color) with text (Text / Text Color / Font Name / Text
+// Alignment) sized by Text Height (scaled real-world height when Scaled=True).
+// Geometry is in DigitizerData; property names are exact (from the PlanSwift
+// Advanced grid). Text may be multi-line -> encoded with [[NL]].
+// ---------------------------------------------------------------------------
+procedure EmitNotes(pgGUID: String);
+var
+  li  : Integer;
+  nch : String;
+  nd  : String;
+begin
+  For li := 0 to ChildCount(pgGUID) - 1 do begin
+    nch := ChildItem(pgGUID, li);
+    if nch = '' then continue;
+    if IsType(nch, 'Note') then begin
+      nd := GetPropertyFormula(nch, 'DigitizerData');
+      if nd = '' then continue;
+      WriteM('--- NOTE_START ---');
+      WriteM('NoteGUID: ' + GetResultAsString(nch, 'GUID'));
+      WriteM('Text: ' + EncodeNewlines(VarToStr(GetPropertyResult(nch, 'Text'))));
+      WriteM('FontName: ' + Trim(VarToStr(GetPropertyResult(nch, 'Font Name'))));
+      WriteM('TextColor: ' + Trim(VarToStr(GetPropertyResult(nch, 'Text Color'))));
+      WriteM('Color: ' + Trim(VarToStr(GetPropertyResult(nch, 'Color'))));
+      WriteM('BorderColor: ' + Trim(VarToStr(GetPropertyResult(nch, 'Border Color'))));
+      WriteM('TextHeight: ' + Trim(VarToStr(GetPropertyResult(nch, 'Text Height'))));
+      WriteM('TextSize: ' + Trim(VarToStr(GetPropertyResult(nch, 'Text Size'))));
+      WriteM('Scaled: ' + Trim(VarToStr(GetPropertyResult(nch, 'Scaled'))));
+      WriteM('AutoSize: ' + Trim(VarToStr(GetPropertyResult(nch, 'Auto Size'))));
+      WriteM('TextAlignment: ' + Trim(VarToStr(GetPropertyResult(nch, 'Text Alignment'))));
+      WriteM('Transparency: ' + Trim(VarToStr(GetPropertyResult(nch, 'Transparency'))));
+      WriteM('Visible: ' + Trim(VarToStr(GetPropertyResult(nch, 'Visible'))));
+      WriteM('DigitizerData:');
+      WriteM(nd);
+      WriteM('--- NOTE_END ---');
+    end;
+  End;
+end;
+
+// ---------------------------------------------------------------------------
+// Parent item type as a manifest string
+// ---------------------------------------------------------------------------
+function ItemTypeStr(AItem: String): String;
+begin
+  // 'Wall Area' first — a Wall Area item may also answer True to IsType 'Area',
+  // so it must be tested before the generic 'Area' branch.
+  if IsType(AItem, 'Wall Area') then Result := 'Wall Area'
+  else if IsType(AItem, 'Linear') then Result := 'Linear'
+  else if IsType(AItem, 'Area') then Result := 'Area'
+  else if IsType(AItem, 'Segment') then Result := 'Segment'
+  else if IsType(AItem, 'Count') then Result := 'Count'
+  else Result := 'Other';
+end;
+
+// ---------------------------------------------------------------------------
+// Swap a page's tree icon (best-effort — the Print Page toggle is the part
+// that matters, so a failure here must not abort it).
+// A Page item's tree icon is a SINGLE image property named 'Icon' (NOT the
+// Count-item 'Symbol Type' / 'Symbol Icon' pair — confirmed by test).
+// ---------------------------------------------------------------------------
+procedure SetPageIcon(pageGUID, iconPath: String);
+begin
+  try
+    SetImagePropertyFromFile(pageGUID, 'Icon', iconPath);
+  except
+    // ignore — icon is cosmetic; Print Page has already been set
+  end;
+end;
+
+// Community artwork ships beside the Python files; no embedded plugin images
+// or helper scripts elsewhere on the author's workstation are required.
+procedure EnsureToggleIcons;
+begin
+  markIconPath := installRoot + '\assets\print_flag.png';
+  origIconPath := installRoot + '\assets\page.png';
+  if not FileExists(markIconPath) then markIconPath := '';
+  if not FileExists(origIconPath) then origIconPath := '';
+end;
+
+procedure EnsureLegendIcons;
+begin
+  legIconArea := installRoot + '\assets\area.png';
+  legIconLinear := installRoot + '\assets\linear.png';
+  legIconCount := installRoot + '\assets\count.png';
+  legIconWall := installRoot + '\assets\wall.png';
+  if not FileExists(legIconArea) then legIconArea := '';
+  if not FileExists(legIconLinear) then legIconLinear := '';
+  if not FileExists(legIconCount) then legIconCount := '';
+  if not FileExists(legIconWall) then legIconWall := '';
+end;
+
+// One tracing per record. Its subtract regions remain attached to that trace.
+procedure WriteTraceGeometry(tracePath: String);
+var
+  holeOffset: Integer;
+  holePath, holeData: String;
+begin
+  WriteM('--- SECTION_START ---');
+  WriteM('SectionGUID: ' + GetResultAsString(tracePath, 'GUID'));
+  WriteM('Closed: ' + VarToStr(GetPropertyFormula(tracePath, 'Closed')));
+  WriteM('DigitizerData:');
+  WriteM(GetPropertyFormula(tracePath, 'DigitizerData'));
+  holeOffset := 0;
+  while holeOffset < ChildCount(tracePath) do begin
+    holePath := ChildItem(tracePath, holeOffset);
+    if (holePath <> '') then
+    if IsType(holePath, 'Area Subtract Section') then begin
+      holeData := GetPropertyFormula(holePath, 'DigitizerData');
+      if holeData <> '' then begin
+        WriteM('--- SUBTRACT_START ---');
+        WriteM('DigitizerData:');
+        WriteM(holeData);
+        WriteM('--- SUBTRACT_END ---');
+      end;
+    end;
+    holeOffset := holeOffset + 1;
+  end;
+  WriteM('--- SECTION_END ---');
+end;
+
+// ---------------------------------------------------------------------------
+// Emit an item's Fill Type and, when it is a Hatch Pattern, the hatch colour,
+// scale and the .PAT code (multi-line, like DigitizerData). Non-hatch items
+// just get 'FillType:' which the builder ignores.
+// ---------------------------------------------------------------------------
+procedure EmitHatch(itm: String);
+var
+  ft        : String;
+  hatchCode : String;
+begin
+  ft := Trim(VarToStr(GetPropertyResult(itm, 'Fill Type')));
+  WriteM('FillType: ' + ft);
+  // The .PAT code lives in 'Hatch Pattern' ('Hatch' is only the pattern name).
+  // Emit whenever a code is present and the fill isn't Solid, so a Fill Type
+  // wording difference can't suppress it.
+  hatchCode := VarToStr(GetPropertyFormula(itm, 'Hatch Pattern'));
+  if (Trim(hatchCode) <> '') and (ft <> 'Solid') then begin
+    WriteM('HatchColor: ' + Trim(VarToStr(GetPropertyResult(itm, 'Hatch Pattern Color'))));
+    WriteM('HatchScale: ' + Trim(VarToStr(GetPropertyResult(itm, 'Hatch Pattern Scale'))));
+    WriteM('HatchData:');
+    WriteM(hatchCode);
+    WriteM('HatchDataEnd');
+  end;
+end;
+
+// ---------------------------------------------------------------------------
+// Symbol Icon (Count 'Icon' appearance) support
+// ---------------------------------------------------------------------------
+// A name [!FolderLocation] would corrupt (it strips [..] segments).
+function HasBrackets(s: String): Boolean;
+begin
+  Result := (Pos('[', s) > 0) or (Pos(']', s) > 0);
+end;
+
+// Resolve a count item's on-disk folder as a bracket-free ANCHOR folder plus the
+// GUID chain (anchor-child .. item) Python descends by matching each subfolder's
+// Data.xml root GUID. This is the only path method that survives bracketed
+// template-folder names. The anchor folder is resolved via its own 'Folder Path'
+// when available, else the proven temporary 'Created By' := [!FolderLocation]
+// rewrite; cached by anchor GUID so each is resolved once. Returns True on ok.
+function ResolveItemAnchor(itm: String; var anchorPath: String;
+                           var chainOut: String): Boolean;
+var
+  cur, curName, anchorGUID, origCreated : String;
+  depth, ci : Integer;
+  chainL : TStringList;
+begin
+  Result := False;
+  anchorPath := '';
+  chainOut := '';
+  chainL := TStringList.Create;
+  anchorGUID := '';
+  cur := itm;
+  depth := 0;
+  while (cur <> '') and (depth < 40) do begin
+    curName := GetPropertyFormula(cur, 'Name');   // RAW (keeps brackets)
+    if not HasBrackets(curName) then begin
+      anchorGUID := cur;
+      Break;
+    End;
+    chainL.Insert(0, GetResultAsString(cur, 'GUID', ''));  // top-down
+    cur := ParentItem(cur);
+    depth := depth + 1;
+  End;
+  if anchorGUID = '' then begin
+    chainL.Free;
+    Exit;
+  End;
+
+  ci := anchorCacheGuid.IndexOf(anchorGUID);
+  if ci >= 0 then
+    anchorPath := anchorCachePath.Strings[ci]
+  else begin
+    anchorPath := Trim(GetResultAsString(anchorGUID, 'Folder Path', ''));
+    if anchorPath = '' then begin
+      // fall back to the temporary rewrite trick (bracket-free anchor -> safe)
+      origCreated := GetPropertyFormula(anchorGUID, 'Created By');
+      NewChangeGroup('SymIcon_Resolve');
+      BeginUpdate;
+      BeginFormulaUpdate;
+      SetPropertyFormula(anchorGUID, 'Created By', '[!FolderLocation]');
+      PostChanges;
+      EndFormulaUpdate;
+      EndUpdate;
+      anchorPath := Trim(GetResultAsString(anchorGUID, 'Created By', ''));
+      NewChangeGroup('SymIcon_Restore');
+      BeginUpdate;
+      BeginFormulaUpdate;
+      SetPropertyFormula(anchorGUID, 'Created By', origCreated);
+      PostChanges;
+      EndFormulaUpdate;
+      EndUpdate;
+    End;
+    if anchorPath <> '' then begin
+      anchorCacheGuid.Add(anchorGUID);
+      anchorCachePath.Add(anchorPath);
+    End;
+  End;
+
+  if anchorPath = '' then begin
+    chainL.Free;
+    Exit;
+  End;
+  for ci := 0 to chainL.Count - 1 do begin
+    if chainOut <> '' then chainOut := chainOut + ' ';
+    chainOut := chainOut + chainL.Strings[ci];
+  End;
+  chainL.Free;
+  Result := True;
+end;
+
+// For a Count item, emit its symbol appearance. Always emit SymbolType so Python
+// knows Icon vs Shape; for 'Icon', also emit the anchor+chain (to locate the
+// item's Data.xml, which holds the 'Symbol Icon' base64 image) and the pixel
+// size + rotation Python stamps it with.
+procedure EmitSymbol(itm: String);
+var
+  symType, anchorP, chainS : String;
+begin
+  if not IsType(itm, 'Count') then Exit;
+  symType := Trim(GetResultAsString(itm, 'Symbol Type', ''));
+  WriteM('SymbolType: ' + symType);
+  if symType <> 'Icon' then Exit;
+  if not ResolveItemAnchor(itm, anchorP, chainS) then Exit;
+  WriteM('SymbolAnchor: ' + anchorP);
+  WriteM('SymbolChain: ' + chainS);
+  // Symbol Width/Height are COMPUTED (formula [Width]/[Length] -> px) and can
+  // come back blank on template items with no page-scale context, so ALSO emit
+  // the raw real-world Width/Length (stored inputs, always present); Python
+  // converts those with the page scale when the px values are missing.
+  WriteM('SymbolWidth: ' + Trim(GetResultAsString(itm, 'Symbol Width', '')));
+  WriteM('SymbolHeight: ' + Trim(GetResultAsString(itm, 'Symbol Height', '')));
+  WriteM('SymbolRotate: ' + Trim(GetResultAsString(itm, 'Symbol Rotate', '')));
+  WriteM('SymbolRealW: ' + Trim(GetResultAsString(itm, 'Width', '')));
+  WriteM('SymbolRealH: ' + Trim(GetResultAsString(itm, 'Length', '')));
+end;
+
+// ---------------------------------------------------------------------------
+// Persist only validated mark changes after the external form accepts.
+// Same page property, icon cache, and change-group mechanism as Ctrl+run.
+function ApplyPickerMarks: Boolean;
+var
+  markIndex: Integer;
+  markGUID: String;
+begin
+  Result := True;
+  if pickerMarkIDs.Count = 0 then Exit;
+  EnsureToggleIcons;
+  NewChangeGroup('PDFPrintMarks');
+  BeginUpdate;
+  BeginFormulaUpdate;
+  try
+    for markIndex := 0 to pickerMarkIDs.Count - 1 do begin
+      markGUID := pickerMarkIDs.Strings[markIndex];
+      if pickerMarkValues.Strings[markIndex] = '1' then begin
+        SetPropertyFormula(markGUID, 'Print Page', 'True');
+        if markIconPath <> '' then SetPageIcon(markGUID, markIconPath);
+      end else begin
+        SetPropertyFormula(markGUID, 'Print Page', 'False');
+        if origIconPath <> '' then SetPageIcon(markGUID, origIconPath);
+      end;
+    end;
+    PostChanges;
+  except
+    Result := False;
+  end;
+  EndFormulaUpdate;
+  EndUpdate;
+  if not Result then
+    ShowMessage('Some print marks could not be saved. Please check the pages in PlanSwift.' +
+                #13#10 + 'No PDF export was started.');
+end;
+
+// The community bridge sends raw section records. Grouping and Qty allocation
+// belong to pdf_section_records.py, not to the host's page-export loop.
+procedure WriteTraceRecord(tracePath: String);
+var
+  parentPath, quantityUnits: String;
+begin
+  parentPath := ParentItem(tracePath);
+  if parentPath = '' then Exit;
+  quantityUnits := '';
+  try
+    quantityUnits := Planswift.getItem(parentPath).getProperty('Qty').inputUnits;
+  except
+    quantityUnits := '';
+  end;
+  WriteM('--- ITEM_START ---');
+  WriteM('ItemGUID: ' + GetResultAsString(parentPath, 'GUID'));
+  WriteM('ItemName: ' + GetResultAsString(parentPath, 'Name'));
+  WriteM('ItemNumber: ' + GetResultAsString(parentPath, 'Item#'));
+  WriteM('ItemType: ' + ItemTypeStr(parentPath));
+  WriteM('Color: ' + GetResultAsString(parentPath, 'Color'));
+  WriteM('Units: ' + Trim(quantityUnits));
+  WriteM('ParentQty: ' + FloatToStr(GetResultAsFloat(parentPath, 'Qty', 0)));
+  WriteM('SectionShare: ' + FloatToStr(GetResultAsFloat(tracePath, 'Takeoff %', 0)));
+  EmitSymbol(parentPath);
+  EmitHatch(parentPath);
+  WriteTraceGeometry(tracePath);
+  WriteM('--- ITEM_END ---');
+  exportedRecords := exportedRecords + 1;
+end;
+
+procedure ManifestFlag(flagName: String; flagValue: Boolean);
+begin
+  if flagValue then WriteM(flagName + ': True') else WriteM(flagName + ': False');
+end;
+
+procedure WriteDrawingRecord(drawingId: String);
+var
+  displayName, matchName, storageFolder: String;
+  dividerAt, recordOffset: Integer;
+  includeTrace: Boolean;
+begin
+  displayName := GetResultAsString(drawingId, 'Name');
+  matchName := Trim(displayName);
+  dividerAt := Pos('|', matchName);
+  if dividerAt > 0 then matchName := Trim(Copy(matchName, 1, dividerAt - 1));
+  while Copy(matchName, 1, 1) = '*' do
+    matchName := Trim(Copy(matchName, 2, Length(matchName)));
+  storageFolder := GetResultAsString(drawingId, 'Folder Path', '');
+  WriteM('--- PAGE_START ---');
+  WriteM('PageName: ' + displayName);
+  WriteM('SheetID: ' + matchName);
+  WriteM('PageGUID: ' + GetResultAsString(drawingId, 'GUID'));
+  WriteM('PageFolder: ' + storageFolder);
+  WriteM('FolderPath: ' + storageFolder);
+  WriteM('TakeoffPath: ' + GetResultAsString(drawingId, 'TakeoffPath', ''));
+  // The renderer reads dimensions from the TIFF; do not trigger host image loads.
+  WriteM('PageWidthPx: ');
+  WriteM('PageHeightPx: ');
+  WriteM('ScaleX: ' + GetResultAsString(drawingId, 'ScaleX', ''));
+  WriteM('ScaleY: ' + GetResultAsString(drawingId, 'ScaleY', ''));
+  WriteM('ScaleUnits: ' + GetResultAsString(drawingId, 'Scale Units', ''));
+  WriteM('PageMultiplier: ' + GetResultAsString(drawingId, 'Multiplier', '1'));
+  ManifestFlag('PrintPage', GetResultAsBoolean(drawingId, 'Print Page', False));
+  if ExportWithLegend then begin
+    FindLegendData(drawingId);
+    if legendDigitizer <> '' then begin
+      WriteM('LegendData:');
+      WriteM(legendDigitizer);
+      WriteM('LegendDataEnd');
+    end;
+  end;
+  if not ExportDrawingOnly then begin
+    EmitDimensions(drawingId);
+    EmitHighlighters(drawingId);
+    EmitNotes(drawingId);
+    recordOffset := 0;
+    while recordOffset < TraceCatalog.Count do begin
+      includeTrace := TracePageIds.Strings[recordOffset] = drawingId;
+      if includeTrace and (not ExportAllItems) then
+        includeTrace := GetResultAsBoolean(TraceCatalog.Strings[recordOffset], 'Visible', False);
+      if includeTrace then WriteTraceRecord(TraceCatalog.Strings[recordOffset]);
+      recordOffset := recordOffset + 1;
+    end;
+  end;
+  WriteM('--- PAGE_END ---');
+  exportedSheets := exportedSheets + 1;
+end;
+
+function ChooseExportFile: Boolean;
+var
+  destinationDialog: TSaveDialog;
+  temporaryFolder: Variant;
+begin
+  Result := False;
+  srcPdfDir := '';
+  if PickerPreview then begin
+    previewPath := installRoot + '\pdf_export_preview.py';
+    if not FileExists(previewPath) then begin
+      ShowMessage('Reinstall the community helpers: the preview program is missing.');
+      Exit;
+    end;
+    temporaryFolder := pickerFSO.GetSpecialFolder(2);
+    pickerTempDir := VarToStr(temporaryFolder.Path) + '\PS_PDF_PREVIEW_' + VarToStr(pickerFSO.GetTempName);
+    pickerFSO.CreateFolder(pickerTempDir);
+    outputPDF := pickerTempDir + '\preview.pdf';
+    Result := True;
+  end else begin
+    destinationDialog := TSaveDialog.Create(nil);
+    try
+      destinationDialog.Title := 'Save community takeoff PDF';
+      if ExportSourcePDF and (pickerSourceRootJSON = '""') then
+        destinationDialog.Title := 'Save in the source project root (contains Plans & Docs)';
+      destinationDialog.InitialDir := lastSaveDir;
+      if lastSaveDir = '' then destinationDialog.InitialDir := GetCurrentDir;
+      destinationDialog.Filter := 'PDF drawings|*.pdf';
+      destinationDialog.DefaultExt := 'pdf';
+      Result := destinationDialog.Execute(0);
+      if Result then begin
+        outputPDF := destinationDialog.FileName;
+        lastSaveDir := ExtractFilePath(outputPDF);
+        if ExportSourcePDF then srcPdfDir := lastSaveDir;
+        SaveSettings;
+      end;
+    finally
+      destinationDialog.Free;
+    end;
+  end;
+  if Result then manifestPath := outputPDF + '.manifest.txt';
+end;
+
+procedure WriteCommunityManifest;
+var
+  sheetOffset: Integer;
+begin
+  AssignFile(manifestFile, manifestPath);
+  Rewrite(manifestFile);
+  try
+    WriteM('=== PDF_TAKEOFF_MANIFEST v1 ===');
+    WriteM('ItemLayout: SectionRecordsV1');
+    WriteM('ProjectName: ' + GetResultAsString(JobRoot, 'Name'));
+    WriteM('OutputPDF: ' + outputPDF);
+    WriteM('ProjectRoot: ' + srcPdfDir);
+    WriteM('SourceRootJSON: ' + pickerSourceRootJSON);
+    if PickerPreview then WriteM('PreviewSaveFolder: ' + lastSaveDir);
+    if ExportSourcePDF then WriteM('BackgroundMode: PDF') else WriteM('BackgroundMode: Raster');
+    if ExportPDFLabels then WriteM('SourcePDFMode: Labels') else WriteM('SourcePDFMode: Files');
+    ManifestFlag('IncludeLegend', ExportWithLegend);
+    ManifestFlag('Greyscale', ExportGreyscale);
+    EnsureLegendIcons;
+    WriteM('LegendIconArea: ' + legIconArea);
+    WriteM('LegendIconLinear: ' + legIconLinear);
+    WriteM('LegendIconCount: ' + legIconCount);
+    WriteM('LegendIconWallArea: ' + legIconWall);
+    exportedSheets := 0;
+    exportedRecords := 0;
+    sheetOffset := 0;
+    while sheetOffset < AcceptedSheets.Count do begin
+      WriteDrawingRecord(AcceptedSheets.Strings[sheetOffset]);
+      sheetOffset := sheetOffset + 1;
+    end;
+    WriteM('=== END ===');
+  finally
+    CloseFile(manifestFile);
+  end;
+end;
+
+procedure LaunchCommunityOutput;
+begin
+  shellObj := CreateOleObject('WScript.Shell');
+  if PickerPreview then begin
+    runCmd := '"' + pythonExe + '" "' + previewPath + '" "' + manifestPath +
+              '" --state "' + pickerStatePath + '"';
+    pickerPreviewExit := shellObj.Run(runCmd, 0, True);
+    PickerReturnToPrint := pickerPreviewExit = 3;
+    if (pickerPreviewExit <> 0) and (pickerPreviewExit <> 3) then
+      ShowMessage('The preview failed. Check its diagnostic message and try again.');
+  end else begin
+    runCmd := '"' + pythonExe + '" "' + builderPath + '" "' + manifestPath + '"';
+    shellObj.Run(runCmd, 1, False);
+    ShowMessage('Creating PDF: ' + outputPDF + #13#10 +
+                'Drawings: ' + IntToStr(exportedSheets) + #13#10 +
+                'Tracing records: ' + IntToStr(exportedRecords) + #13#10 +
+                'The export window will report completion or errors.');
+  end;
+end;
+
+procedure ProcessCommunityChoice;
+begin
+  JobRoot := GetItem('\Job');
+  if JobRoot = '' then Exit;
+  PageRoot := GetItem(JobRoot + '\Pages');
+  MeasureRoot := GetItem(JobRoot + '\Takeoff');
+  AcceptedSheets := TStringList.Create;
+  TraceCatalog := TStringList.Create;
+  TracePageIds := TStringList.Create;
+  VisibleTakeoffPages := TStringList.Create;
+  AllTakeoffPages := TStringList.Create;
+  CatalogPages := TStringList.Create;
+  pickerMarkIDs := TStringList.Create;
+  pickerMarkValues := TStringList.Create;
+  anchorCacheGuid := TStringList.Create;
+  anchorCachePath := TStringList.Create;
+  try
+    PickerMarksOnly := False;
+    PickerPreview := False;
+    pickerSourceRootJSON := '""';
+    IndexProjectTraces;
+    if not RunExternalPicker then Exit;
+    if not ApplyPickerMarks then Exit;
+    if PickerMarksOnly then Exit;
+    if AcceptedSheets.Count = 0 then Exit;
+    if not ChooseExportFile then Exit;
+    BeginUpdate;
+    try
+      WriteCommunityManifest;
+    finally
+      EndUpdate;
+    end;
+    LaunchCommunityOutput;
+  finally
+    anchorCachePath.Free;
+    anchorCacheGuid.Free;
+    pickerMarkValues.Free;
+    pickerMarkIDs.Free;
+    CatalogPages.Free;
+    AllTakeoffPages.Free;
+    VisibleTakeoffPages.Free;
+    TracePageIds.Free;
+    TraceCatalog.Free;
+    AcceptedSheets.Free;
+  end;
+end;
+
+procedure RunExportSession;
+begin
+  PickerReturnToPrint := True;
+  while PickerReturnToPrint do begin
+    PickerReturnToPrint := False;
+    try
+      ProcessCommunityChoice;
+    except
+      ShowMessage('The community export could not finish. Check the destination folder and job data.' +
+                  #13#10 + 'No PDF launch is attempted after a collection error.');
+    end;
+  end;
+end;
+
+// MAIN
+// ---------------------------------------------------------------------------
+begin
+  if Planswift.IsJobOpen <> 'True' then begin
+    ShowMessage('No job is currently open.');
+    Exit;
+  End;
+
+  // Same installation location on each Windows account; no manual paths.
+  shellObj := CreateOleObject('WScript.Shell');
+  installRoot := VarToStr(shellObj.ExpandEnvironmentStrings('%LOCALAPPDATA%')) + '\PlanSwift\Takeoff PDF Community';
+  pythonExe := installRoot + '\runtime\Scripts\python.exe';
+  builderPath := installRoot + '\pdf_takeoff_builder.py';
+  settingsPath := installRoot + '\export_folders.txt';
+  if (not FileExists(pythonExe)) or (not FileExists(builderPath)) or
+     (not FileExists(installRoot + '\pdf_section_records.py')) then begin
+    ShowMessage('Install Takeoff PDF Community first: extract the matching ZIP and run Install.cmd.' +
+                #13#10 + 'Expected folder: ' + installRoot);
+    Exit;
+  End;
+  LoadSettings;
+
+  // ---- Ctrl+run: toggle "Print Page" on the selected page ------------------
+  // Held Ctrl turns this into a page-marking toggle instead of the export UI:
+  //   Print Page False -> True  + show the print-page icon
+  //   Print Page True  -> False + restore the original page icon
+  // then it exits without opening the export form.
+  if (GetAsyncKeyState(17) and $8000) <> 0 then begin
+    ctrlPageGUID := SelectedPage;
+    if ctrlPageGUID = '' then begin
+      ShowMessage('Ctrl+Print: no page is selected.');
+      Exit;
+    End;
+
+    flagWasSet := getResultAsBoolean(ctrlPageGUID, 'Print Page', False);
+
+    // Use the bundled community icons. markIconPath / origIconPath are '' if unavailable, in which
+    // case the icon simply isn't changed but the toggle still works.
+    EnsureToggleIcons;
+
+    NewChangeGroup('TogglePrintPage');
+    BeginUpdate;
+    BeginFormulaUpdate;
+    if flagWasSet then begin
+      // Currently marked -> unmark and restore the original icon.
+      SetPropertyFormula(ctrlPageGUID, 'Print Page', 'False');
+      if origIconPath <> '' then SetPageIcon(ctrlPageGUID, origIconPath);
+    end else begin
+      // Currently unmarked -> mark and show the print-page icon.
+      SetPropertyFormula(ctrlPageGUID, 'Print Page', 'True');
+      if markIconPath <> '' then SetPageIcon(ctrlPageGUID, markIconPath);
+    End;
+    PostChanges;
+    EndFormulaUpdate;
+    EndUpdate;
+    Exit;
+  End;
+
+  // Session state is private to this launch and survives Preview -> Back.
+  pickerFSO := CreateOleObject('Scripting.FileSystemObject');
+  pickerStream := pickerFSO.GetSpecialFolder(2);
+  pickerStateDir := VarToStr(pickerStream.Path) + '\PS_PDF_SESSION_' + VarToStr(pickerFSO.GetTempName);
+  pickerFSO.CreateFolder(pickerStateDir);
+  pickerStatePath := pickerStateDir + '\state.json';
+  RunExportSession;
+  try
+    if pickerFSO.FileExists(pickerStatePath) then pickerFSO.DeleteFile(pickerStatePath, True);
+    pickerStream := pickerFSO.GetFolder(pickerStateDir);
+    if (pickerStream.Files.Count = 0) and (pickerStream.SubFolders.Count = 0) then
+      pickerFSO.DeleteFolder(pickerStateDir, True);
+  except
+    // A leftover session file never changes the completed export.
+  end;
+end;

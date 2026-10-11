@@ -1,0 +1,41 @@
+BEFORE SHARING THE FIRST COMMUNITY RELEASE
+
+This folder is a release candidate for your separate-plugin test, not a claim
+that the revised Pascal bridge has already run successfully inside PlanSwift.
+
+1. Source review: read SOURCE_REVIEW.txt. The identified inherited Excel-export
+   implementation was replaced in 1.0.1. Distribute this matching source pair,
+   not the earlier bridge or original plugin reference files. Keep the notices.
+2. Host terms: check the EULA applying to your PlanSwift version and any plugin/
+   SDK terms. Official documentation supports customization/plugins, but is not
+   an express redistribution clearance for this specific project. If needed,
+   ask ConstructConnect support specifically about distributing an independent,
+   unencrypted plugin and its external AGPL helper. No message has been sent.
+3. Create a fresh community plugin with the separate full script. Run Install.cmd,
+   then test a COPY of a small job: Area, Linear, Count, Wall Area, page quantities
+   and units, explicit/automatic legends, layers/highlights, flags on Cancel,
+   raster/source backgrounds, Preview/Back and reordered/removed-page saves.
+4. Record the exact PlanSwift and PDF-reader versions that pass. Test package
+   import plus installation in another Windows user account or clean workstation.
+5. Export the SwiftPluginPackage using PLUGIN_EXPORT_FIELDS.txt. Keep scripts
+   unencrypted and publish the exact matching bridge source beside it and the ZIP.
+6. Add your actual release/repository link to REDDIT_POST.txt. Do not publish test
+   logs, local preference files, customer drawings or your private plugin backup.
+7. Keep the license and notices with any redistributed version. Contributors
+   must not submit code or drawings they do not have permission to share.
+
+LEGAL CONTEXT (NOT LEGAL CLEARANCE)
+The plugin/export authoring interfaces show that customization is an intended
+capability. They do not by themselves resolve the rights in borrowed source or
+all contractual questions about distributing a plugin. The AGPL license here
+covers project material you have rights to license; it cannot license PlanSwift,
+its stock artwork, or someone else's plugin for you. For a definitive answer
+about your contract/rights, get qualified legal advice or written vendor guidance.
+
+Official references checked while preparing this release:
+https://help.constructconnect.com/planswift-user-guide-174
+https://planswiftactivations.app.constructconnect.com/legal/eula
+https://www.planswift.com/eula/
+https://www.planswift.com/support/
+https://pymupdf.io/licensing
+https://www.gnu.org/licenses/agpl-3.0.html

@@ -1,0 +1,44 @@
+TAKEOFF PDF COMMUNITY 1.0.1 - INHERITED-CODE REPLACEMENT
+
+- Replaces the original Excel plugin's recursive section collector and inherited
+  page/item loop structure with a new iterative inventory and section serializer.
+- Moves page-level item grouping and Qty allocation into pdf_section_records.py.
+  Count items retain their calculated Qty units (including LN FT and SQ FT).
+- Adds explicit validation for malformed quantities and inconsistent item records.
+- Rewrites export-session orchestration with scoped cleanup of temporary lists
+  and manifest handles. Existing picker, preview, source matching, PDF geometry,
+  legends, layer controls, highlighting and print flags remain available.
+- Installs the new normalizer module. Reinstall helpers and replace the entire
+  bridge TXT together; an older helper cannot interpret SectionRecordsV1.
+- Includes source-history review and regression tests. No original Excel-plugin
+  source or artwork is included in the ZIP or the separately delivered bridge.
+- Actual execution of the revised bridge in PlanSwift remains an acceptance step.
+
+COMMUNITY EDITION SCOPE (introduced in 1.0.0)
+
+
+Preserved: searchable/interactive legends, native PDF layer toggles and selection
+highlights, automatic/manual legend layout, page multiplier collision handling,
+original-source/raster backgrounds, source checks, page search/flags, saved
+choices, custom order, finished preview, multi-page drag/remove and Undo/Redo.
+
+Removed from this separate edition:
+- Custom linked-item collection and borrowed geometry based on Source GUID.
+- Building = NOT VALID exclusion.
+- Linked-item PDF Color metadata, automatic palette/recoloring and overrides.
+- Treating the takeoff item's Notes field as wall thickness (unused renderer
+  fallback was removed too; page Note annotations remain supported).
+- Personal hardcoded Python/helper/settings paths, embedded plugin icon helper,
+  private client names in synthetic fixtures and private release-history docs.
+
+Added for redistribution:
+- Per-user installer with isolated runtime and pinned PDF dependency.
+- Original community SVG/PNG icons, including editable SVG sources.
+- Separate preferences/install folder to coexist with the private exporter.
+- AGPL text, notices, install/user/developer guides, metadata and Reddit draft.
+- Synthetic interactive PDF demo and reproducible generator.
+
+Validation results are recorded in VALIDATION.txt after packaging checks.
+Python-side checks do not execute the PlanSwift embedded engine. The revised
+bridge, separate SwiftPluginPackage and clean-machine import need maintainer
+verification before publishing; no minimum host version is asserted yet.

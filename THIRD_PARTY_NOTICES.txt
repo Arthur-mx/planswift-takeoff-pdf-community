@@ -1,0 +1,36 @@
+TAKEOFF PDF COMMUNITY - LICENSE AND THIRD-PARTY NOTICES
+
+Project source and newly created SVG/PNG icons: AGPL-3.0-only, see LICENSE.txt.
+No personal author name or username has been supplied for public attribution.
+This notice does not replace existing third-party copyright or license notices.
+
+PyMuPDF 1.26.3 / MuPDF: maintained by Artifex and contributors. PyMuPDF is offered
+under AGPLv3 or a separate commercial license. Install.cmd downloads the PyMuPDF
+package; no PyMuPDF/MuPDF binaries are embedded in this ZIP. Their own notices
+remain in the installed package. Do not describe this combined distribution as
+MIT-only. Commercial activity is not itself prohibited by AGPL, but license
+obligations still apply to covered distribution/modification and network use.
+https://pymupdf.io/licensing
+https://github.com/pymupdf/PyMuPDF
+
+Python and Tcl/Tk: installed separately; their own licenses apply. Python's
+standard library is used by the helper programs and installer.
+https://docs.python.org/3/license.html
+
+Pillow: optional development/test/demo dependency, installed separately through
+requirements-dev.txt, under its upstream license. Not needed for normal export.
+https://github.com/python-pillow/Pillow/blob/main/LICENSE
+
+PlanSwift and ConstructConnect: proprietary third-party software and names used
+only to describe compatibility. Neither is distributed or relicensed here. This
+project is independent and is not sponsored, approved, supported or endorsed by
+ConstructConnect. No PlanSwift stock images or company logos are included in the
+new community artwork.
+
+SOURCE PROVENANCE REVIEW
+The workflow originally used portions of an "Export Pages to Excel" plugin.
+In 1.0.1 the identified inherited traversal, grouping and export orchestration
+were replaced. That plugin's form, output code and artwork are not included.
+See SOURCE_REVIEW.txt for the inspected references, replacement scope and limits.
+This is a documented functional rewrite, not a certified clean-room process or
+legal opinion. Original reference files are not distributed with this release.

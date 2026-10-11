@@ -1,0 +1,65 @@
+I am working on Takeoff PDF Community, an independent Windows PlanSwift export
+plugin licensed AGPL-3.0-only. Read README.txt, USER_GUIDE.txt, RELEASE_NOTES.txt,
+THIRD_PARTY_NOTICES.txt and the complete source before proposing changes.
+
+There are two cooperating programs:
+1. The separate "Takeoff PDF Community - PlanSwift Script.txt" runs in PlanSwift's
+   limited Pascal-style script engine. It collects pages/items/sections into a
+   text manifest and launches external Python windows. It is deliberately NOT
+   inside the helper ZIP. Ask me for the matching TXT if I have not supplied it.
+2. The Python files in the ZIP render the PDF and own the Tkinter UI. They use
+   PyMuPDF and a dedicated Python runtime installed by Install.cmd/install.py at
+   %LOCALAPPDATA%\PlanSwift\Takeoff PDF Community. No workstation-specific paths.
+
+Key files:
+pdf_takeoff_builder.py: manifest parser, raster/source PDF background, geometry,
+  hatches/symbols, searchable legend, multiplier placement, PDF layers/actions.
+pdf_export_picker.py: searchable page tree, selected-page order, Print flags,
+  saved preferences, source-folder validation and preview/session protocol.
+pdf_export_preview.py: worker, finished-PDF display, grouped order/removal/history,
+  atomic save of retained/reordered original PDF pages and return-to-picker state.
+pdf_preview_thumbnails.py: virtualized thumbnail/list canvas, selection and cache.
+pdf_source_paths.py + pdf_source_labels.py: safe source matching and validation.
+pdf_section_records.py: normalizes SectionRecordsV1 records into item groups;
+  owns parent Qty times section-share allocation, retaining first-seen order.
+install.py: per-user environment/dependency/file installation.
+make_demo.py: synthetic demo generator; requires development dependencies.
+
+Source history:
+Read SOURCE_REVIEW.txt. The 1.0.1 host collector and orchestration were rewritten.
+Do not reintroduce code from the earlier Excel exporter or use its source as a
+new implementation template. Keep the separate bridge and helper versions paired.
+
+Invariants:
+- Parent Qty times the SUM of this page's section Takeoff % fractions produces
+  the page legend total. Units are Qty.inputUnits, NOT inferred from takeoff type.
+- The current quantity display rounds up to whole units; document any change.
+- Preserve per-item PlanSwift colors. No private linked-item or building-status
+  conventions are part of this community edition.
+- All PDF interaction uses native SetOCGState actions. Legend text stays visible;
+  base takeoff layers and initially-off selection overlays stay independently
+  addressable. Selection overlays must not print as normal takeoff.
+- Hide/Show all applies document-wide to takeoff; Clear highlight is page-local.
+- A companion legend page and its drawing share page_keys and move/remove together.
+- Reorder/remove saves preserve native layer actions, links, page identity and
+  source protection; do not rebuild via a naive copy that loses the OCG catalog.
+- Original PDFs are never overwritten by Preview Save. Raster and source modes
+  both depend on PlanSwift TIFF dimensions for correct overlay alignment.
+- No silent source-PDF fallback; fail on missing/ambiguous/mislabeled sources.
+- Print flags persist even on Cancel. Preview choices/order survive Back to print.
+- Session request/response text preserves Unicode; do not casually change the
+  existing protocol headers or expected exit codes (preview exit 3 means Back).
+- The embedded PlanSwift engine is NOT full Delphi. Native tree widgets and
+  some declarations previously failed. Keep new interface logic in Python.
+- If changing Pascal, deliver the ENTIRE plain script TXT; never ask me to copy
+  code from a red/green diff. Do not change unrelated installed PlanSwift data.
+
+Run the tests with development dependencies: python -m unittest discover -p
+"test_*.py". Desktop widget tests need an interactive Windows desktop. Use only
+synthetic or explicitly authorized sample data. Visually check rendered PDFs
+and test native layer actions, not just text output. Retest the actual bridge in
+PlanSwift when changing it; Python tests cannot certify the host script engine.
+
+First inspect the current implementation and tell me what is relevant to my
+requested change. Preserve the existing feature set and add focused regression
+checks for meaningful risks. Update installation/docs/source versions as needed.

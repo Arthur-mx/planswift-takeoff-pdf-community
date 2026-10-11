@@ -1,0 +1,75 @@
+SOURCE HISTORY AND REPLACEMENT REVIEW - COMMUNITY 1.0.1
+Review date: 2026-10-10
+
+RESULT
+The identifiable implementation inherited from the supplied "Export Pages to
+Excel" source has been removed from the community bridge. The replacement sends
+individual tracing records to Python, where item grouping and page quantities
+are computed. No runtime dependency on the Excel plugin remains. Your personal
+working exporter and community 1.0.0 were not modified.
+
+REFERENCES INSPECTED (read-only; NOT included in this distribution)
+1. Original Export by Page.txt: saved original Pascal script, 318 lines.
+   SHA-256: 064fd73790cdf848710744b4812b594ce1355465474bc09cd5576161954100b1
+2. Export By Page/Data.xml: local plugin's Script Code property, 318 lines.
+   Whole XML SHA-256: ea08aa8099e14cfb7328ff84cad2be09a49b9d2c55ae7f08307290e5c293b5fa
+The two extracted scripts are identical after removing whitespace. Both were
+compared with the community 1.0.0 and 1.0.1 bridges. The entire reference script,
+including its native form, section/page collection and Excel/CSV/clipboard
+output, was inspected. These copies establish the scope of this review; they
+are not proof of every possible historical source or its license status.
+
+WHAT WAS REPLACED
+- Original recursive getChilditems/GetChildPages collection pattern: removed.
+  New IndexProjectTraces uses an iterative preorder inventory and page IDs.
+  The PDF-specific external page picker supplies the accepted page order.
+- Inherited sectionLst/slst/itmLst page filtering, parent deduplication and nested
+  summation loop: removed. Each tracing is serialized with its parent identity,
+  ParentQty, SectionShare, Qty inputUnits, geometry and drawing metadata.
+- Item grouping and allocation: newly implemented in pdf_section_records.py.
+  For each page, Qty = parent Qty x sum(included section Takeoff % fractions).
+  It retains first-seen item order and all included section/subtract geometry.
+  It does not redistribute the shares of hidden or unselected sections.
+- Host export orchestration, destination selection, page metadata assembly and
+  helper launch: rewritten as separate procedures with scoped cleanup.
+- Original exportType callbacks, native Excel form, Excel automation, CSV and
+  clipboard output: absent before this rewrite and remain absent.
+
+WHAT WAS RETAINED AND WHY
+The PDF manifest protocol, external Tkinter forms, source-PDF matching, PDF
+renderer, preview, legend placement/actions, highlight overlays, flag workflow,
+hatch/count-symbol support and original community icons were developed for this
+PDF exporter; they do not occur in either reference Excel script. PDF-specific
+helper procedures were retained, with updated inventory references as needed.
+PlanSwift API/property names and ordinary Pascal statements remain necessary to
+read a job. Shared names such as Qty, PageGUID or TStringList are not themselves
+a copy of the former export algorithm. No original plugin artwork is shipped.
+
+COMPARISON METHOD
+In addition to reading the code, a diagnostic comparison removed line comments
+and whitespace, lowercased tokens, retained identifiers and quoted strings, and
+used Python difflib.SequenceMatcher with autojunk=False. In 1.0.0 the longest
+matching token run was 25, with other long runs in the inherited page/item loops.
+In 1.0.1 the longest run was 8: generic block endings and standard save-dialog
+construction. This is a code-review aid, NOT a legal similarity threshold or
+proof that no copyright claim is possible. No reference source excerpts are
+reproduced here. Release checksums identify the exact delivered source pair.
+
+VERIFICATION AND LIMITS
+See VALIDATION.txt for automated tests and outstanding PlanSwift acceptance
+checks. The regression suite includes multi-page calculated Count quantities,
+multiple sections per item, units, geometry, filtering shares, decimal formats,
+invalid data and equivalent rendered PDF/layer output.
+
+The same reviewer saw the reference source while doing this rewrite, so this is
+NOT represented as a formally separated clean-room reimplementation. The goal
+was to replace identified inherited code while preserving the user's functional
+requirements, not to disguise it through renaming. The architecture and data
+ownership changed, rather than only identifiers or formatting.
+
+This review found no retained distinctive implementation from the supplied
+Excel-exporter references that needs to be distributed with the new source.
+That technical finding does not certify legal clearance, identify every possible
+third-party contribution, or alter PlanSwift's own license/SDK terms. AGPLv3
+covers project material the distributor has rights to license. It does not grant
+rights in PlanSwift, another plugin, or their stock artwork.

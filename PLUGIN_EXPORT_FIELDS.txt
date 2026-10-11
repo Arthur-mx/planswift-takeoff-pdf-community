@@ -1,0 +1,47 @@
+EXPORT PLUGIN PACKAGE - SUGGESTED FIELDS
+
+Plugin Name:
+Takeoff PDF Community
+
+Version: 1     .     0
+Build: 1
+(Release identifier: 1.0.1)
+
+Description (paste this):
+Independent, open-source PDF exporter for PlanSwift. Export takeoff with searchable
+legend text, clickable layer visibility controls and selection-style highlighting.
+Includes automatic or user-positioned legends, raster/source PDF backgrounds,
+source sheet checks, a searchable page tree, saved Print flags, custom PDF order,
+and a finished-PDF preview with thumbnails/list view, multi-page dragging, removal
+and Undo. Requires the matching Takeoff PDF Community Python helper ZIP and a
+licensed PlanSwift installation. Install the helper ZIP with Install.cmd first.
+AGPLv3; editable source supplied separately. Unofficial community project, not
+affiliated with or endorsed by ConstructConnect. First community release: please
+verify the export against your job before relying on it.
+
+CHECKBOXES IN THE SHOWN EXPORT WINDOW
+[ ] Require License - leave off; no additional plugin activation system is used.
+    This does NOT remove the recipient's need for a valid PlanSwift license.
+[ ] Compile/Encrypt all Events and Scripts - leave off to keep the script editable.
+[ ] Require agree to terms and conditions - leave off for this release. Supply
+    LICENSE.txt with the download rather than inventing a separate EULA.
+[ ] Require PlanSwift Version - leave off until a minimum version has been tested.
+    The 10.1.1.8 shown in the screenshot is not a verified compatibility minimum.
+
+Author / publisher / website fields on later pages:
+Leave blank as requested. Do not fill them with ConstructConnect or PlanSwift.
+Use assets/print_flag.png for your own plugin command icon if desired.
+
+EXPORT CONTENTS
+Create/export ONLY the new community plugin command with the complete community
+script. Do not export your existing personal plugin, custom assemblies, job data,
+private event handlers, saved folder settings or imported stock artwork. The new
+script does not need embedded image or FolderLocation properties on the plugin.
+Keep all events unencrypted. Review the export contents before the final step.
+
+DISTRIBUTE THESE MATCHING FILES TOGETHER
+- Takeoff-PDF-Community-1.0.1.zip (Python source, installer, docs, tests, demo)
+- Takeoff PDF Community - PlanSwift Script.txt (complete editable bridge source)
+- Your exported Takeoff-PDF-Community-1.0.1.SwiftPluginPackage
+The bridge TXT is intentionally excluded from the ZIP at your request. Publish
+it alongside the package so recipients have the complete corresponding source.

@@ -1,0 +1,49 @@
+TITLE
+I made a PlanSwift PDF exporter with searchable legends, layer toggles and click-to-highlight takeoff
+
+POST
+I wanted a takeoff PDF that was easier to review than a flat printout, so I've
+been building an independent PlanSwift export plugin. I'm sharing a community
+version with the source so other estimators can customize it and add features.
+
+The three things I'm happiest with:
+
+- Searchable legend text. Item descriptions, quantities and units are real PDF
+  text, so you can search and copy them instead of reading a screenshot.
+- Clickable layer controls in the legend. Turn individual takeoff items on/off,
+  or use Hide all / Show all to compare the markup with the drawing.
+- Click a legend description to highlight that item's tracing, including point
+  markers. It's a visual selection aid inspired by PlanSwift's canvas selection.
+
+It also has a searchable page tree, saved Print flags, custom page order and a
+finished-PDF preview. In the preview you can switch between thumbnails and a
+compact list, drag multiple pages together, remove pages and Undo mistakes.
+Legends can place themselves automatically, or use a PlanSwift Legend box when
+you want control over the location.
+
+You can use PlanSwift's raster drawing or the original source PDF. Source PDF
+mode supports individual sheet files and combined sets with matching page labels;
+it checks the source files before export. Setup details are in the download.
+
+The layer controls and highlighting worked in my existing tests with Bluebeam
+Revu and PDF-XChange. Other PDF readers may behave differently. The searchable
+legend works over a raster drawing, but this does not OCR the drawing itself.
+
+Download + complete source: [ADD YOUR RELEASE LINK HERE]
+
+Windows + licensed PlanSwift + Python are required. The download includes an
+installer for the Python helpers, instructions and a synthetic demo PDF. Import
+the matching SwiftPluginPackage after installing the helpers. It runs locally;
+there is no cloud upload of your drawings. The source is AGPLv3.
+
+This is the first community release, not an official ConstructConnect product.
+Try it on a copy of a small job first, check quantities/alignment, and let me know
+what works or breaks in your PlanSwift/PDF reader versions. Contributions and
+improvements are welcome, especially from people using different takeoff setups.
+
+BEFORE POSTING (NOT PART OF THE POST)
+Replace the release-link placeholder, complete PUBLISHING.txt, and publish the
+ZIP, editable script TXT and SwiftPluginPackage together. A short screen recording
+of search -> eye toggle -> click-to-highlight will explain the main features
+better than a long feature list. Use the synthetic demo or drawings you have
+permission to share. Check the chosen subreddit's current sharing/promotion rules.
