@@ -3,7 +3,8 @@ An independent, unofficial PlanSwift PDF export plugin.
 
 START HERE
 1. Read INSTALL.txt and run Install.cmd from the extracted ZIP.
-2. Import the separately distributed SwiftPluginPackage into PlanSwift.
+2. Double-click the separately distributed SwiftPluginPackage in Windows with
+   PlanSwift installed, then follow its package installation prompts.
    Maintainers building that package use the separate full PlanSwift Script TXT.
 3. Open a job, choose pages, and use Preview PDF before saving.
 
@@ -31,14 +32,16 @@ COMMUNITY EDITION
 No custom linked-takeoff property is required. Only items owning sections are
 exported. There is no custom building-status exclusion and no automatic linked-
 item recoloring. Existing PlanSwift colors are retained. It does not use personal
-workstation paths, client examples or another installed plugin's icon assets.
+workstation paths or another installed plugin's icon assets. The GitHub README
+uses a synthetic demo and privacy-edited interface images. Test fixtures are synthetic.
 This edition has separate installed files and preferences from the original
 private exporter.
 
 PDF READER SUPPORT
 The existing legend interactions have been user-tested in Bluebeam Revu and
-PDF-XChange. This community packaging still needs its first end-to-end test in
-PlanSwift. Other viewers may ignore optional-content actions; browser previews
+PDF-XChange. The maintainer reports the community launcher works in PlanSwift
+with Shell Execute blank; this is not certification of every export feature or
+PlanSwift version. Other viewers may ignore optional-content actions; browser previews
 are not the compatibility benchmark. Open examples/Interactive Demo.pdf in a
 layer-capable desktop reader. The built-in exporter preview displays the finished
 appearance; interact with legend links in the saved PDF reader.
@@ -68,3 +71,10 @@ Create/import the PlanSwift plugin separately as described in INSTALL.txt.
 Community 1.1.0 includes the shared feature updates from the personal exporter.
 Workflow-specific linked items, filtering and color overrides remain excluded.
 Upgrade both the helpers and the complete PlanSwift script together.
+
+READY-MADE PLUGIN PACKAGE
+Both the helper ZIP and the user-exported SwiftPluginPackage are available at:
+https://github.com/Arthur-mx/planswift-takeoff-pdf-community/tree/main/downloads
+Both are required. The package installs the command, not the Python helpers.
+Its command is currently named Export takeoff to pdf in Claude Scripts > Misc.
+Leave Shell Execute blank; use Plugin Type = Script Code.

@@ -44,7 +44,8 @@ def install(source, target):
         for name in RUNTIME_FILES + ('requirements.txt', 'VERSION.txt', 'LICENSE.txt', 'THIRD_PARTY_NOTICES.txt'):
             shutil.copy2(source / name, target / name)
         shutil.copytree(source / 'assets', target / 'assets', dirs_exist_ok=True)
-    print('\nInstallation complete. Import the matching SwiftPluginPackage in PlanSwift.', flush=True)
+    print('\nInstallation complete. Double-click the matching SwiftPluginPackage in Windows.', flush=True)
+    print('With PlanSwift installed, this opens its package installer. Follow the prompts.', flush=True)
     print('If building the plugin yourself, use the separate full PlanSwift Script TXT.', flush=True)
     return python
 

@@ -1,0 +1,2 @@
+38df00ef5ef50ba0e5d4697fb3863bd1ce2ce27986bea0208cc4ed7770679dd0  Takeoff PDF Community 1.1.0.SwiftPluginPackage
+ff203aa1de280f574c5b58e0334abb4dc8a894cd08a44e3242ed83b21bdae8a6  Takeoff-PDF-Community-1.1.0.zip

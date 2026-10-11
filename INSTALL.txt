@@ -18,11 +18,24 @@ NORMAL INSTALLATION
    It creates a dedicated environment, installs the pinned PDF engine and checks
    that the PDF and Tk modules load. Wait for "Installation complete."
    Administrator access is normally unnecessary.
-4. In PlanSwift use the Plugins tab's Import Plugin Package command and import
-   the matching SwiftPluginPackage. Exact menu labels vary by version.
+4. Double-click the matching .SwiftPluginPackage file in Windows. With PlanSwift
+   installed, its registered file association opens the package installer.
+   Follow the prompts. If Windows does not recognize the file, use PlanSwift's
+   Plugins tab > Import Plugin Package command instead (labels vary by version).
 5. Open a small COPY of a job, run Takeoff PDF Community and choose Preview PDF.
    Check page totals, units, alignment, legend placement and page order. Save a
    test PDF and try its eye controls and description highlights in your reader.
+
+DOWNLOADS
+The repository's downloads/ folder contains BOTH required files:
+- Takeoff-PDF-Community-1.1.0.zip
+- Takeoff PDF Community 1.1.0.SwiftPluginPackage
+https://github.com/Arthur-mx/planswift-takeoff-pdf-community/tree/main/downloads
+The plugin package installs the PlanSwift command. Install.cmd installs its
+Python helpers separately; the package alone does not install Python or helpers.
+The exported command is named "Export takeoff to pdf" in Claude Scripts > Misc.
+Keep Plugin Type set to Script Code and leave Shell Execute blank. The script
+finds the community helper installation automatically for each Windows user.
 
 INSTALL LOCATION
 %LOCALAPPDATA%\PlanSwift\Takeoff PDF Community
@@ -44,7 +57,7 @@ metadata are in PLUGIN_EXPORT_FIELDS.txt. Exact authoring steps depend on the
 PlanSwift version and must be verified by the package maintainer.
 
 UPDATING
-Close export/preview windows. Extract a new release, rerun Install.cmd and import
+Close export/preview windows. Extract a new release, rerun Install.cmd and run
 its matching SwiftPluginPackage when the script changes. Only shipped Python and
 asset files are overwritten; preferences and remembered folders are retained.
 Keep the ZIP and script versions together. Reinstalling updates the dedicated

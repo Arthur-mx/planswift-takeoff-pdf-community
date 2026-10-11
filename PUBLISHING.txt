@@ -1,7 +1,8 @@
 BEFORE SHARING THE FIRST COMMUNITY RELEASE
 
-This folder is a release candidate for your separate-plugin test, not a claim
-that the revised Pascal bridge has already run successfully inside PlanSwift.
+The maintainer has tested launching the community plugin inside PlanSwift with
+Shell Execute blank and supplied the 1.1.0 SwiftPluginPackage. The checklist
+below still applies to broader feature and clean-workstation compatibility.
 
 1. Source review: read SOURCE_REVIEW.txt. The identified inherited Excel-export
    implementation was replaced in 1.0.1. Distribute this matching source pair,

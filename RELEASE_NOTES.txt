@@ -1,5 +1,10 @@
 TAKEOFF PDF COMMUNITY 1.1.0 - SHARED FEATURE UPDATE (2026-10-11)
 
+- Ready-made SwiftPluginPackage and matching helper ZIP in downloads/.
+  Run Install.cmd, then double-click the package on Windows with PlanSwift
+  installed. Shell Execute stays blank; the package contains the community
+  bridge, not the Python helper installation. No takeoff behavior changed in
+  this packaging/documentation update.
 - Visual legend defaults from the main window and finished-PDF preview.
   Drag/resize the area, snap to corners and set preferred text size. Landscape
   and portrait settings are saved separately. PlanSwift Legend boxes win.
