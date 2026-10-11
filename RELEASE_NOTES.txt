@@ -1,3 +1,25 @@
+TAKEOFF PDF COMMUNITY 1.1.0 - SHARED FEATURE UPDATE (2026-10-11)
+
+- Visual legend defaults from the main window and finished-PDF preview.
+  Drag/resize the area, snap to corners and set preferred text size. Landscape
+  and portrait settings are saved separately. PlanSwift Legend boxes win.
+- Rebuilding a preview after a defaults change keeps page order, removals
+  and Undo/Redo history, including drawing/companion-legend groups.
+- Native revision cloud outlines (no fill), rubber stamps and sticky tabs,
+  with searchable labels, dedicated PDF layers and collision bounds.
+- Independent Visible/All/None choices for takeoff and page items. Page
+  items include annotations, notes, highlighters and dimensions. Select None
+  in both groups for background only. Choices persist through Cancel/Back.
+- Three-times-wider settings scrollbar; clicking a visible control no
+  longer recenters the settings panel. Keyboard focus still reveals controls.
+- Preserves the community collector rewrite, original community artwork,
+  separate installation/preferences and original PlanSwift takeoff colors.
+  Linked-item rules, building exclusions, color overrides and Notes-as-wall-
+  thickness behavior remain excluded. Personal source files are unchanged.
+- Requires BOTH updated helpers and the full 1.1.0 bridge TXT. The response
+  protocol is now RESULT_V5; section serialization stays SectionRecordsV1.
+- See VALIDATION.txt for automated checks and remaining PlanSwift testing.
+
 TAKEOFF PDF COMMUNITY 1.0.1 - INHERITED-CODE REPLACEMENT
 
 - Replaces the original Excel plugin's recursive section collector and inherited

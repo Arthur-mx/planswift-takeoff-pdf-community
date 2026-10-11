@@ -15,6 +15,9 @@ that the revised Pascal bridge has already run successfully inside PlanSwift.
    then test a COPY of a small job: Area, Linear, Count, Wall Area, page quantities
    and units, explicit/automatic legends, layers/highlights, flags on Cancel,
    raster/source backgrounds, Preview/Back and reordered/removed-page saves.
+   For 1.1.0 also check separate takeoff/page-item Visible/All/None modes,
+   hidden annotations, cloud outlines, one stamp per two points, angled tabs,
+   portrait/landscape defaults, existing Legend priority and preview rebuilds.
 4. Record the exact PlanSwift and PDF-reader versions that pass. Test package
    import plus installation in another Windows user account or clean workstation.
 5. Export the SwiftPluginPackage using PLUGIN_EXPORT_FIELDS.txt. Keep scripts

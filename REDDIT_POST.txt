@@ -18,8 +18,13 @@ The three things I'm happiest with:
 It also has a searchable page tree, saved Print flags, custom page order and a
 finished-PDF preview. In the preview you can switch between thumbnails and a
 compact list, drag multiple pages together, remove pages and Undo mistakes.
-Legends can place themselves automatically, or use a PlanSwift Legend box when
-you want control over the location.
+Legends can place themselves automatically, follow a PlanSwift Legend box, or use
+your saved defaults. A visual editor lets you drag the preferred area and choose
+the text size separately for landscape and portrait sheets.
+
+Revision cloud outlines, rubber stamps and sticky tabs also export, alongside
+notes, dimensions and highlighters. Separate takeoff/page-item controls let you
+include either group, both, or just the drawing background.
 
 You can use PlanSwift's raster drawing or the original source PDF. Source PDF
 mode supports individual sheet files and combined sets with matching page labels;

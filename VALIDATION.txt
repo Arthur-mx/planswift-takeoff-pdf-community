@@ -1,43 +1,60 @@
-VALIDATION - COMMUNITY 1.0.1
+VALIDATION - COMMUNITY 1.1.0
+Date: 2026-10-11
 
-Passed 145 automated tests on Windows with Python 3.13 and PyMuPDF 1.26.3.
-This includes nine new section-record tests: allocation across pages, retained
-first-seen order, merged geometry/subtracts, filtered shares, Count units,
-decimal separators, zero/negative values, malformed inputs and inconsistent
-item metadata. A two-page raw-record export matches an equivalent grouped export
-in rendered pixels, searchable text, layer properties and annotation references.
+Passed 182 automated tests on Windows with Python 3.13 and PyMuPDF 1.26.3.
+Command: python -m unittest discover -v
 
-Existing tests cover source matching/labels, legends, layer visibility and
-highlight actions, multiplier placement, picker controls, preview order/removal/
-history/view preferences, community installation paths and source exclusions.
-A static bridge check confirms removal of named inherited routines/variables,
-presence of the raw-section protocol and use of parent Qty and Qty.inputUnits.
-Static checks do not compile Pascal or certify the embedded engine.
+NEW SHARED FEATURES
+- Visual legend defaults: validation, proportional areas, physical font size,
+  portrait/landscape settings, manual PlanSwift Legend priority and collision
+  fallback. Direct exports and preview workers read COMMUNITY preferences.
+- Real Tk tests exercise the main-window shortcut, editor controls, saved
+  preferences and preview rebuilds preserving grouped order/removal/history.
+- Independent takeoff/page-item modes, saved through Cancel and Preview/Back;
+  RESULT_V5 handoff includes the new page-item field.
+- Wider settings scrollbar, stable focus on visible controls and automatic
+  scrolling to controls reached by keyboard below the visible area.
+- Annotation parsing, visibility, rotated page transforms, cloud winding and
+  outline-only output, one stamp per two control points, searchable labels,
+  dedicated layers, tab direction, timestamps and reported font substitutions.
+- An integrated SectionRecordsV1 export combines the community quantity
+  allocation with annotations and saved defaults, in both raster and source-PDF
+  modes and each of the three page-item visibility settings.
 
-The installer was run against a fresh isolated folder. It created its own virtual
-environment and installed pinned PyMuPDF 1.26.3. Using only this installed runtime,
-all seven runtime modules imported, Tk initialized, and a raw-section manifest
-rendered successfully with a searchable 500 LN FT quantity and native layer
-visibility/highlight actions. No changes were made to the normal installation.
+RETAINED COMMUNITY BEHAVIOR
+The suite also covers section grouping, page-share calculations and Qty units,
+source-file/page-label matching, native layer actions and highlights, multiplier
+placement, page flags, preview ordering/removal/Undo, thumbnail/list preferences,
+and the separate installation/settings paths. The installer-copy test checks
+all nine runtime modules and preserves existing user preferences.
 
-The synthetic demo generator now uses SectionRecordsV1. Both regenerated pages
-have exactly the same rendered pixels, text and layer properties as the previously
-visually checked 1.0.0 demo. No real job drawing was used.
+Source checks confirm that personal linked-item/color/filter conventions and
+workstation paths remain excluded, and that the rewritten community collector
+and SectionRecordsV1 normalization remain in use. Personal tracked working
+files have no changes relative to their staged upload baseline.
 
-All Python sources parsed successfully. Personal working-file hashes were checked
-against the pre-review baseline. The archive excludes original plugin references,
-the separately delivered bridge TXT, temporary runtimes, settings, logs, cached
-bytecode and client drawings. See SOURCE_REVIEW.txt for provenance-review scope.
+VISUAL CHECK
+A separate, entirely synthetic sheet was rendered through the community builder
+and inspected using a Poppler PNG render. It contains a clear cloud outline,
+one angled APPROVED stamp, an angled REVIEW tab, two takeoff sections allocated
+to a searchable 500 LN FT row, a 12-point saved-position legend and the multiplier.
+No customer drawing or sample manifest is included in the release package.
+The previously approved public demo PDF and screenshot are unchanged.
 
-NOT YET VERIFIED: PLANSwift HOST ACCEPTANCE
-The rewritten Pascal bridge has not been compiled/run inside PlanSwift. Before
-publishing, create the separate community plugin using the ENTIRE matching TXT,
-reinstall helpers, then test a copy of a small job:
-- Nested takeoff/page folders; select pages in a non-default order.
-- Area, Linear, Count and Wall Area, including calculated Count Qty in LN FT/SQ FT.
-- One parent spanning pages, multiple sections on one page and hidden sections.
-- Area subtracts, hatch patterns and count symbols; drawing-only and empty pages.
-- Existing and automatic legend placement; layer eyes, highlights and Hide/Show all.
-- Print flags on Cancel, source/raster backgrounds, Preview/Back and reordered saves.
-Then test importing the SwiftPluginPackage in another Windows account or machine
-and record exact PlanSwift/PDF-reader versions. Python tests cannot replace this.
+INSTALLATION / HOST LIMITS
+This update verifies the installer file set and saved preferences in automated
+tests; it is not a new clean-machine installation certification. No live
+PlanSwift job was modified. Python-side tests and static bridge checks do not
+compile or execute PlanSwift's embedded script engine.
+
+Before sharing a SwiftPluginPackage, install the 1.1.0 helpers and replace the
+entire bridge TXT in the separate community plugin, then test a small job copy:
+- Nested page folders and a custom selected-page order.
+- Area, Linear, Count and Wall Area with parent Qty/inputUnits allocation.
+- All takeoff/page-item mode combinations, including hidden annotations.
+- Cloud outlines, two-point stamps, angled tabs, notes/highlighters/dimensions.
+- Saved portrait/landscape defaults, existing Legend priority and fallback.
+- Preview rebuild, reorder/remove/Undo, Back, and Print flags on Cancel.
+- Source/raster backgrounds and legend interaction in the saved PDF reader.
+Record exact PlanSwift/PDF-reader versions and verify package import in another
+Windows account or machine. See SOURCE_REVIEW.txt for provenance-review scope.

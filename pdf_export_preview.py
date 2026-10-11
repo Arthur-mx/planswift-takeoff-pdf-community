@@ -67,7 +67,7 @@ def save_preview(pdf, destination, protected_sources=(), order=None):
     return destination
 
 
-def render_preview(manifest, workdir):
+def render_preview(manifest, workdir, preferences_path=None):
     """Use an isolated copy of the manifest and never its requested output path."""
     import pdf_takeoff_builder as builder
     from pdf_source_paths import SourceResolver, clean_sheet_id
@@ -87,7 +87,10 @@ def render_preview(manifest, workdir):
     isolated_manifest = workdir / 'preview.manifest.txt'
     shutil.copyfile(manifest, isolated_manifest)
     output = workdir / 'preview.pdf'
-    details = builder.build(str(isolated_manifest), strict=True, output_path=str(output))
+    from pdf_export_picker import load_preferences, default_preferences_path
+    preferences = load_preferences(preferences_path or default_preferences_path())
+    details = builder.build(str(isolated_manifest), strict=True, output_path=str(output),
+                            legend_defaults=preferences.legend_defaults, legend_editor_dir=workdir / 'legend-layout')
     project = job.get('ProjectName', '').strip()
     filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', project).strip(' .')[:100]
     details.update(protected_sources=protected_sources,
@@ -114,6 +117,20 @@ def cleanup_bridge_manifest(manifest):
             pass
 
 
+def remap_snapshot(snapshot, old_keys, new_keys):
+    """Keep drawing groups and selection when a rebuild adds/removes legend pages."""
+    def expand(indices):
+        groups = list(dict.fromkeys(old_keys[i] for i in indices))
+        return [i for key in groups for i, value in enumerate(new_keys) if value == key]
+    current = snapshot['current']
+    if current is not None:
+        key = old_keys[current]
+        ordinal = sum(value == key for value in old_keys[:current])
+        matches = [i for i, value in enumerate(new_keys) if value == key]
+        current = matches[min(ordinal,len(matches)-1)] if matches else None
+    return dict(order=expand(snapshot['order']), selected=expand(snapshot['selected']), current=current)
+
+
 class PreviewWindow:
     def __init__(self, manifest, start=True, state_path=None, preferences_path=None):
         import tkinter as tk
@@ -138,6 +155,8 @@ class PreviewWindow:
         self.poll_job = self.render_job = self.focus_job = None
         self.page_number = 0
         self.details = {}
+        self.rebuild_state = None
+        self.details_button = None
         self.closed = False
         self.root = tk.Tk()
         self.root.title('Takeoff PDF - Preview')
@@ -167,6 +186,8 @@ class PreviewWindow:
         self.zoom_box = ttk.Combobox(toolbar, textvariable=self.zoom, state='readonly', width=10,
                                     values=('Fit page', 'Fit width', '50%', '75%', '100%', '150%', '200%', '400%'))
         self.zoom_box.pack(side='right')
+        self.legend_defaults_button = ttk.Button(toolbar, text='Legend defaults...', command=self.edit_legend_defaults, state='disabled')
+        self.legend_defaults_button.pack(side='right', padx=8)
         self.zoom_box.bind('<<ComboboxSelected>>', self.schedule_render)
         ttk.Label(toolbar, text='Zoom').pack(side='right', padx=8)
         panes = ttk.Panedwindow(self.root, orient='horizontal')
@@ -287,11 +308,38 @@ class PreviewWindow:
             except OSError:
                 self.status.set('View changed, but the preference could not be saved for next time.')
 
+    def edit_legend_defaults(self):
+        if self.document is None:
+            return
+        from pdf_legend_defaults import LegendDefaultsDialog
+        from pdf_export_picker import load_preferences, save_preferences
+        current = load_preferences(self.preferences_path)
+        key = self.details['page_keys'][self.page_order[self.page_number]] if self.page_order else None
+        template = self.details.get('legend_templates', {}).get(key)
+        def save(value):
+            latest = load_preferences(self.preferences_path)
+            save_preferences(self.preferences_path, replace(latest, legend_defaults=value))
+            self.rebuild_state = dict(snapshot=self.order_snapshot(), keys=self.details['page_keys'],
+                                     undo=list(self.undo_stack), redo=list(self.redo_stack))
+            self.undo_stack.clear(); self.redo_stack.clear()
+            self.clear_drop_cue()
+            self.document.close(); self.document = None
+            self.page_list.set_pages([])
+            self.canvas.delete('all')
+            self.status.set('Applying legend defaults. Your PDF order and removed pages will be preserved.')
+            for button in self.order_buttons + [self.restore_button, self.remove_button, self.save_button,
+                           self.undo_button,self.redo_button,self.legend_defaults_button,self.previous_button,self.next_button]:
+                button.state(['disabled'])
+            self.progress.pack(side='left',padx=10); self.progress.start(20)
+            self.start_build()
+        return LegendDefaultsDialog(self.root,current.legend_defaults,save,template)
+
     def start_build(self):
         try:
             self.log = open(self.workdir / 'build.log', 'w', encoding='utf-8')
             self.process = subprocess.Popen(
-                [sys.executable, str(Path(__file__).resolve()), '--render', str(self.manifest), str(self.workdir)],
+                [sys.executable, str(Path(__file__).resolve()), '--render', str(self.manifest), str(self.workdir),
+                 '--preferences', str(self.preferences_path)],
                 stdin=subprocess.DEVNULL, stdout=self.log, stderr=subprocess.STDOUT,
                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             self.poll_job = self.root.after(100, self.poll_build)
@@ -318,6 +366,7 @@ class PreviewWindow:
     def load_document(self):
         self.details = json.loads((self.workdir / 'ready.json').read_text(encoding='utf-8'))
         self.document = fitz.open(self.pdf)
+        self.page_list.images.clear(); self.page_list.failed.clear()
         self.progress.stop()
         self.progress.pack_forget()
         self.page_order = list(range(len(self.document)))
@@ -333,10 +382,23 @@ class PreviewWindow:
         warnings = self.details.get('warnings', [])
         self.status.set('Preview ready. Use Save PDF to create your final export.'
                         + (f' {len(warnings)} drawing warnings; see Details.' if warnings else ''))
+        if self.details_button is not None:
+            self.details_button.destroy()
+            self.details_button = None
         if warnings:
-            self.ttk.Button(self.status_label.master, text='Details',
-                            command=lambda: self.show_details('\n\n'.join(warnings))).grid(row=2, column=0, sticky='w')
-        self.show_page(0)
+            self.details_button = self.ttk.Button(self.status_label.master, text='Details',
+                            command=lambda: self.show_details('\n\n'.join(warnings)))
+            self.details_button.grid(row=2, column=0, sticky='w')
+        self.legend_defaults_button.state(['!disabled'])
+        if self.rebuild_state is not None:
+            saved = self.rebuild_state
+            self.rebuild_state = None
+            keys = self.details['page_keys']
+            self.undo_stack = [remap_snapshot(state,saved['keys'],keys) for state in saved['undo']]
+            self.redo_stack = [remap_snapshot(state,saved['keys'],keys) for state in saved['redo']]
+            self.restore_snapshot(remap_snapshot(saved['snapshot'],saved['keys'],keys))
+        else:
+            self.show_page(0)
 
     def show_error(self, message):
         self.progress.stop()
@@ -580,6 +642,11 @@ class PreviewWindow:
                 state['order'] = order
                 state['custom_order'] = True
                 state['edited'] = True
+            elif self.rebuild_state is not None:
+                saved = self.rebuild_state
+                state['order'] = list(dict.fromkeys(saved['keys'][i] for i in saved['snapshot']['order']))
+                state['custom_order'] = True
+                state['edited'] = True
             write_session_state(self.state_path, state)
         except (OSError, ValueError) as exc:
             messagebox.showerror('Could not return to print window', str(exc), parent=self.root)
@@ -735,6 +802,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--render', action='store_true')
     parser.add_argument('--state', type=Path)
+    parser.add_argument('--preferences', type=Path)
     parser.add_argument('manifest', type=Path)
     parser.add_argument('workdir', nargs='?', type=Path)
     args = parser.parse_args(argv)
@@ -742,13 +810,13 @@ def main(argv=None):
         if args.workdir is None:
             parser.error('The render worker needs a private working folder.')
         try:
-            render_preview(args.manifest, args.workdir)
+            render_preview(args.manifest, args.workdir, args.preferences)
             return 0
         except Exception as exc:
             (args.workdir / 'error.txt').write_text(str(exc), encoding='utf-8')
             traceback.print_exc()
             return 1
-    return PreviewWindow(args.manifest, state_path=args.state).run()
+    return PreviewWindow(args.manifest, state_path=args.state, preferences_path=args.preferences).run()
 
 
 if __name__ == '__main__':

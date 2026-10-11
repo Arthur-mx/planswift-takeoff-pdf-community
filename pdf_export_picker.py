@@ -20,8 +20,9 @@ import traceback
 
 
 REQUEST_HEADER = "PDF_EXPORT_PICKER_REQUEST_V2"
-RESULT_HEADER = "PDF_EXPORT_PICKER_RESULT_V4"
+RESULT_HEADER = "PDF_EXPORT_PICKER_RESULT_V5"
 MODES = ("VISIBLE", "ALL", "DRAWING")
+PAGE_ITEM_MODES = ("VISIBLE", "ALL", "NONE")
 PAGES_PANE_WIDTH = (360, 640)
 ORDER_COLUMN_WIDTHS = {"sheet": (150, 380), "folder": (180, 420)}
 ORDER_HINT = "Click Print to flag. Drag rows to reorder.\nCtrl/Shift selects multiple. Hover for full text."
@@ -49,7 +50,7 @@ PlanSwift page name. Descriptions after | are allowed:
 
 **FOLDER STRUCTURE MUST MATCH PLANSWIFT**
 Mirror the Pages panel folders under the chosen source project folder:
-    Project root / Plans & Docs / 2026-01-01 / Permit set / A-101.pdf
+    Project root / Plans & Docs / 2026-01-01 / Permit set / A-001.pdf
 Choose **Project root**, not Plans & Docs or the final Permit set subfolder.
 Keep **the same drawing revision** and folder organization. The chosen source
 folder is remembered **for this project**.
@@ -57,7 +58,7 @@ folder is remembered **for this project**.
 **OPTION: USE A LABELED DRAWING SET DIRECTLY**
 Enable **Match drawing sets by page labels**. No extraction is needed.
 **Every page must have a real PDF page label matching its sheet ID**, such as
-A-101 or A-101. Matching ignores case and outside spaces. Printed sheet names,
+A-001 or A-101. Matching ignores case and outside spaces. Printed sheet names,
 bookmarks, and unlabeled page positions are not used. Set labels in your PDF
 editor first; use **Check PDF labels...** below to inspect them.
 
@@ -146,6 +147,8 @@ class ExportPreferences:
     pdf_labels: bool = False
     source_roots: dict[str, str] = field(default_factory=dict)
     preview_view: str = "Thumbnails"
+    legend_defaults: dict = field(default_factory=dict)
+    page_items: str = "VISIBLE"
 
 
 def default_preferences_path() -> Path:
@@ -167,8 +170,14 @@ def load_preferences(path: Path | None) -> ExportPreferences:
     for key, default in values.items():
         value = data.get(key)
         if type(value) is type(default):
+            if key == "legend_defaults":
+                from pdf_legend_defaults import clean_defaults
+                values[key] = clean_defaults(value)
+                continue
             if key == "source_roots":
                 values[key] = {k: v for k, v in value.items() if isinstance(k, str) and isinstance(v, str)}
+                continue
+            if key == "page_items" and value not in PAGE_ITEM_MODES:
                 continue
             if key == "content" and value not in MODES:
                 continue
@@ -394,7 +403,7 @@ class SelectionModel:
 
 
 def write_result(path: Path, model: SelectionModel, legend: bool, greyscale: bool,
-                 background: str, action: str = "EXPORT", source_root: str = ""):
+                 background: str, action: str = "EXPORT", source_root: str = "", page_items: str = "VISIBLE"):
     if action not in ("EXPORT", "PREVIEW", "MARKS_ONLY"):
         raise ValueError("Invalid window action.")
     if (not model.checked and action != "MARKS_ONLY") or not model.checked.issubset(model.pages):
@@ -403,11 +412,13 @@ def write_result(path: Path, model: SelectionModel, legend: bool, greyscale: boo
         raise ValueError("The page order does not match the selected pages.")
     if background not in ("RASTER", "PDF", "PDF_LABELS") or model.mode not in MODES:
         raise ValueError("Invalid export options.")
+    if page_items not in PAGE_ITEM_MODES:
+        raise ValueError("Invalid page item mode.")
     lines = [RESULT_HEADER, model.catalog.token, model.mode,
              "1" if legend and model.mode != "DRAWING" else "0",
              "1" if greyscale else "0", background, action,
              json.dumps(source_root if background != "RASTER" and action != "MARKS_ONLY" else "", ensure_ascii=True),
-             "PAGES", *model.selected_guids(), "MARKS"]
+             page_items, "PAGES", *model.selected_guids(), "MARKS"]
     for guid, marked in model.mark_changes():
         lines.extend([guid, "1" if marked else "0"])
     lines.append("END")
@@ -456,6 +467,7 @@ class PickerWindow:
         preferences = load_preferences(self.preferences_path)
         self.source_project_key = catalog.nodes[0].guid if catalog.nodes else ""
         self.model.set_mode(preferences.content)
+        self.legend_defaults = preferences.legend_defaults
         self.accepted = False
         self.root = tk.Tk()
         self.root.title("Create Takeoff PDF")
@@ -504,7 +516,10 @@ class PickerWindow:
         self.settings_canvas.grid(row=0, column=0, sticky="nsew")
         self.settings_scrollbar = ttk.Scrollbar(self.settings_frame, orient="vertical",
                                                 command=self.settings_canvas.yview)
-        self.settings_scrollbar.grid(row=0, column=1, sticky="ns")
+        # Allocate three times the theme's normal width. Stretch the themed
+        # scrollbar itself so its thumb and track share the larger hit area.
+        self.settings_frame.columnconfigure(1, minsize=self.settings_scrollbar.winfo_reqwidth() * 3)
+        self.settings_scrollbar.grid(row=0, column=1, sticky="nsew")
         self.settings_canvas.configure(yscrollcommand=self.settings_scrollbar.set)
         left = ttk.Frame(self.settings_canvas, padding=(0, 0, 6, 8))
         self.settings_content = left
@@ -512,18 +527,29 @@ class PickerWindow:
         left.bind("<Configure>", self.update_settings_scroll)
         self.settings_canvas.bind("<Configure>", self.resize_settings)
         self.mode = tk.StringVar(value=preferences.content)
-        content = ttk.LabelFrame(left, text="Drawing content", padding=12)
+        content = ttk.LabelFrame(left, text="Takeoff items", padding=12)
         content.pack(fill="x", pady=(0, 14))
-        for label, value in (("Drawing only", "DRAWING"), ("Visible takeoff items", "VISIBLE"),
-                             ("All takeoff items", "ALL")):
+        for label, value in (("Visible items", "VISIBLE"), ("All items", "ALL"),
+                             ("None", "DRAWING")):
             ttk.Radiobutton(content, text=label, value=value, variable=self.mode,
                             command=self.change_mode).pack(anchor="w", pady=5)
+        self.page_items = tk.StringVar(value=preferences.page_items)
+        page_content = ttk.LabelFrame(left, text="Page items", padding=12)
+        page_content.pack(fill="x", pady=(0, 14))
+        ttk.Label(page_content, text="Clouds, stamps, sticky tabs, notes,\nhighlighters and dimensions.",
+                  style="Hint.TLabel", wraplength=235).pack(anchor="w", pady=(0, 5))
+        for label, value in (("Visible items", "VISIBLE"), ("All items", "ALL"), ("None", "NONE")):
+            ttk.Radiobutton(page_content, text=label, value=value,
+                            variable=self.page_items).pack(anchor="w", pady=5)
+        ttk.Label(page_content, text="Background only: choose None\nin both groups.",
+                  style="Hint.TLabel", wraplength=235).pack(anchor="w", pady=(5, 0))
         options = ttk.LabelFrame(left, text="PDF options", padding=12)
         options.pack(fill="x", pady=(0, 14))
         self.legend = tk.BooleanVar(value=preferences.legend)
         self.greyscale = tk.BooleanVar(value=preferences.greyscale)
         self.legend_check = ttk.Checkbutton(options, text="Include takeoff legend", variable=self.legend)
         self.legend_check.pack(anchor="w", pady=5)
+        ttk.Button(options, text="Legend defaults...", command=self.edit_legend_defaults).pack(fill="x", pady=(0, 5))
         if preferences.content == "DRAWING":
             self.legend_check.state(["disabled"])
         ttk.Checkbutton(options, text="Greyscale drawing background",
@@ -663,6 +689,8 @@ class PickerWindow:
         self.export_button.pack(side="right")
         self.preview_button = ttk.Button(footer, text="Preview PDF", command=lambda: self.accept("PREVIEW"))
         self.preview_button.pack(side="right", padx=(8, 0))
+        self.legend_defaults_button = ttk.Button(footer, text="Legend defaults…", command=self.edit_legend_defaults)
+        self.legend_defaults_button.pack(side="right", padx=(8, 0))
         ttk.Button(footer, text="Cancel", command=self.cancel).pack(side="right", padx=10)
         self.tree_font = font.Font(family="Segoe UI", size=10)
         self.root.bind("<FocusOut>", self.hide_cell_tip, add="+")
@@ -981,6 +1009,12 @@ class PickerWindow:
         return "break"
 
     def reveal_setting(self, event):
+        # Tk sends FocusIn to the focused control AND its ancestor frames.
+        # Revealing a whole settings frame scrolls even when the clicked radio
+        # is already visible. Only reveal the actual focus owner; this keeps
+        # keyboard traversal to offscreen controls working.
+        if event.widget != self.root.focus_get():
+            return
         canvas = self.settings_canvas
         height = self.settings_content.winfo_height()
         top = event.widget.winfo_rooty() - self.settings_content.winfo_rooty()
@@ -1357,7 +1391,7 @@ class PickerWindow:
             if background == "PDF" and self.pdf_labels.get():
                 background = "PDF_LABELS"
             write_result(self.result_path, self.model, self.legend.get(), self.greyscale.get(), background, action,
-                         self.source_root.get().strip())
+                         self.source_root.get().strip(), page_items=self.page_items.get())
         except (OSError, ValueError) as exc:
             messagebox.showerror("Could not save choices", str(exc), parent=self.root)
             return
@@ -1373,7 +1407,8 @@ class PickerWindow:
             "default_order": [self.model.nodes[i].guid for i in sorted(self.model.pages)],
             "edited": self.model.edited, "custom_order": self.model.custom_order,
             "search": self.search.get(),
-            "options": {"content": self.mode.get(), "legend": self.legend.get(),
+            "options": {"content": self.mode.get(), "page_items": self.page_items.get(),
+                        "legend": self.legend.get(),
                         "greyscale": self.greyscale.get(), "background": self.background.get(),
                         "pdf_labels": self.pdf_labels.get(), "source_root": self.source_root.get()}})
 
@@ -1393,6 +1428,8 @@ class PickerWindow:
         if mode in MODES:
             self.mode.set(mode)
             self.model.set_mode(mode)
+        if options.get("page_items") in PAGE_ITEM_MODES:
+            self.page_items.set(options["page_items"])
         for name in ("legend", "greyscale", "pdf_labels"):
             if type(options.get(name)) is bool:
                 getattr(self, name).set(options[name])
@@ -1411,6 +1448,17 @@ class PickerWindow:
             self.search.set(state["search"])
             self.model.filter(state["search"])
 
+    def edit_legend_defaults(self):
+        from pdf_legend_defaults import LegendDefaultsDialog
+        from dataclasses import replace
+        current = load_preferences(self.preferences_path)
+        def save(value):
+            if self.preferences_path is not None:
+                latest = load_preferences(self.preferences_path)
+                save_preferences(self.preferences_path, replace(latest, legend_defaults=value))
+            self.legend_defaults = value
+        return LegendDefaultsDialog(self.root, current.legend_defaults if self.preferences_path else self.legend_defaults, save)
+
     def save_current_preferences(self):
         if self.preferences_path is not None:
             current = load_preferences(self.preferences_path)
@@ -1423,7 +1471,8 @@ class PickerWindow:
             save_preferences(self.preferences_path, ExportPreferences(
                 content=self.mode.get(), legend=self.legend.get(), greyscale=self.greyscale.get(),
                 background=self.background.get(), pdf_labels=self.pdf_labels.get(), source_roots=roots,
-                preview_view=current.preview_view))
+                preview_view=current.preview_view, legend_defaults=current.legend_defaults,
+                page_items=self.page_items.get()))
 
     def close(self):
         self.hide_cell_tip()
@@ -1462,7 +1511,7 @@ def demo_catalog() -> Catalog:
     nodes = [Node("folder-root", -1, "Plans & Docs"),
              Node("folder-date", 0, "2026-01-01"),
              Node("folder-interior", 1, "Permit set")]
-    names = ["A-101 | Cover sheet", "ID2.1 | 1st Floor", "ID2.2 | 2nd Floor", "ID2.3 | 3rd Floor",
+    names = ["A-001 | Cover sheet", "ID2.1 | 1st Floor", "ID2.2 | 2nd Floor", "ID2.3 | 3rd Floor",
              "ID3.1 | Enlarged plans", "ID4.1 | Amenity elevations", "ID4.2 | Restroom elevations",
              "ID5.1 | Finish details", "ID6.1 | Schedules", "ID7.1 | Millwork"]
     for i, name in enumerate(names):

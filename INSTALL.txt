@@ -1,4 +1,4 @@
-INSTALL TAKEOFF PDF COMMUNITY 1.0.1
+INSTALL TAKEOFF PDF COMMUNITY 1.1.0
 
 REQUIREMENTS
 - Windows with a licensed PlanSwift installation and access to its plugin tools.
@@ -75,7 +75,13 @@ number plus your exact PlanSwift version. Host compilation remains version-speci
 Official import overview:
 https://www.planswift.com/pdf/General%20Contractor%20Starter%20Pack.pdf
 
-UPGRADING TO 1.0.1
-Run Install.cmd from this ZIP, then use the matching complete PlanSwift Script
-TXT in your separate community plugin. Do not mix the 1.0.1 bridge with 1.0.0
-Python helpers. Saved user preferences are retained by the installer.
+UPGRADING TO 1.1.0
+Run Install.cmd from this ZIP, then replace the ENTIRE PlanSwift Script Code
+with the matching complete community TXT (or import its matching plugin
+package). Both halves changed: the picker now sends separate page-item
+choices using RESULT_V5. Older scripts cannot read that response.
+The installer also adds pdf_legend_defaults.py and pdf_page_annotations.py.
+Saved community preferences are retained; personal preferences are untouched.
+Page items initially use Visible items. For a background-only PDF, choose
+None under BOTH Takeoff items and Page items. Saved legend defaults initially
+remain disabled, preserving automatic placement until you configure them.

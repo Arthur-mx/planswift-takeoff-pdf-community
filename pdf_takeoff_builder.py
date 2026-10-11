@@ -32,6 +32,8 @@ try:
 except ImportError:
     sys.exit("PyMuPDF is not installed. Run:  pip install pymupdf")
 
+from pdf_page_annotations import render_page_annotations
+
 from pdf_source_paths import (clean_sheet_id, resolve_source_pdf, resolve_page_folder,
                               SourceResolver, validate_source_page)
 
@@ -166,7 +168,7 @@ def parse_manifest(path):
         lines = [ln.rstrip("\r\n") for ln in f]
 
     job = {"pages": []}
-    page = item = section = subtract = dimension = highlighter = note = None
+    page = item = section = subtract = dimension = highlighter = note = annotation = None
     in_digitizer = False
     digitizer_buf = []
     digitizer_target = None       # dict the current DigitizerData belongs to
@@ -182,7 +184,8 @@ def parse_manifest(path):
                 "--- SUBTRACT_END ---", "--- DIMENSION_START ---",
                 "--- DIMENSION_END ---", "--- HIGHLIGHTER_START ---",
                 "--- HIGHLIGHTER_END ---", "--- NOTE_START ---",
-                "--- NOTE_END ---", "--- PAGE_END ---")
+                "--- NOTE_END ---", "--- ANNOTATION_START ---",
+                "--- ANNOTATION_END ---", "--- PAGE_END ---")
     for ln in lines:
         marker = ln.strip()
         if in_digitizer:
@@ -254,6 +257,12 @@ def parse_manifest(path):
                 page.setdefault("notes", []).append(note)
         elif marker == "--- NOTE_END ---":
             note = None
+        elif marker == "--- ANNOTATION_START ---":
+            annotation = {}
+            if page is not None:
+                page.setdefault("annotations", []).append(annotation)
+        elif marker == "--- ANNOTATION_END ---":
+            annotation = None
         elif marker.startswith("DigitizerData"):
             in_digitizer = True
             digitizer_buf = []
@@ -261,6 +270,8 @@ def parse_manifest(path):
                                 (highlighter if highlighter is not None else
                                  (dimension if dimension is not None else
                                   (subtract if subtract is not None else section))))
+            if annotation is not None:
+                digitizer_target = annotation
         elif marker == "LegendData:":
             in_legend = True
             legend_buf = []
@@ -278,9 +289,24 @@ def parse_manifest(path):
                             section if section is not None else (
                                 item if item is not None else (
                                     page if page is not None else job))))))
+            if annotation is not None:
+                target = annotation
             target[key] = val
     from pdf_section_records import normalize_section_records
     return normalize_section_records(job)
+
+
+def selected_page_items(page, key, job):
+    mode = job.get("PageItems", "").upper()
+    if not mode:
+        mode = job.get("AnnotationVisibility", "VISIBLE").upper() if key == "annotations" else "VISIBLE"
+    if mode == "NONE":
+        return []
+    records = page.get(key, [])
+    if mode == "ALL":
+        return records
+    return [r for r in records
+            if str(r.get("Visible", "True")).strip().lower() not in ("false", "0", "no")]
 
 
 def parse_points(xml_text):
@@ -1262,7 +1288,10 @@ def require_complete_preview(skipped):
                          + "\n".join("%s: %s" % issue for issue in skipped))
 
 
-def build(manifest_path, strict=False, output_path=None):
+def build(manifest_path, strict=False, output_path=None, legend_defaults=None, legend_editor_dir=None):
+    from pdf_legend_defaults import clean_defaults, orientation_of, preferred_layout
+    legend_defaults = clean_defaults(legend_defaults)
+    legend_templates = {}
     job = parse_manifest(manifest_path)
     out_path = output_path or job.get("OutputPDF") or os.path.join(
         os.path.dirname(manifest_path), "takeoff_export.pdf")
@@ -1498,6 +1527,7 @@ def build(manifest_path, strict=False, output_path=None):
     icon_uid = [0]
     dim_ocg = [None]           # shared "Dimensions" OCG, created on first use
     hl_ocg = [None]            # shared "Highlighters" OCG, created on first use
+    annotation_layers = {}
     note_ocg = [None]          # shared "Notes" OCG, created on first use
 
     # Pass 3 — draw
@@ -1541,10 +1571,7 @@ def build(manifest_path, strict=False, output_path=None):
         # Box mode = filled semi-transparent polygon; Linear mode = thick
         # round-capped stroke. On a shared non-toggle "Highlighters" layer, kept
         # out of the legend. Transparency is the opacity (alpha = value/255).
-        for hl in page.get("highlighters", []):
-            vis = (hl.get("Visible", "True") or "").strip().lower()
-            if vis in ("false", "0", "no"):
-                continue
+        for hl in selected_page_items(page, "highlighters", job):
             hpts = parse_points(hl.get("digitizer_xml", ""))
             if len(hpts) < 2:
                 continue
@@ -1813,7 +1840,7 @@ def build(manifest_path, strict=False, output_path=None):
         scale_y = float(page.get("ScaleY", 0) or 0)
         sxe = scale_x or scale_y
         sye = scale_y or scale_x
-        for dim in page.get("dimensions", []):
+        for dim in selected_page_items(page, "dimensions", job):
             dpts = parse_points(dim.get("digitizer_xml", ""))
             if len(dpts) < 2 or sxe <= 0 or sye <= 0:
                 continue
@@ -1853,10 +1880,7 @@ def build(manifest_path, strict=False, output_path=None):
         n_scale_x = float(page.get("ScaleX", 0) or 0)
         n_scale_y = float(page.get("ScaleY", 0) or 0)
         n_sxe = n_scale_x or n_scale_y
-        for nt in page.get("notes", []):
-            nvis = (nt.get("Visible", "True") or "").strip().lower()
-            if nvis in ("false", "0", "no"):
-                continue
+        for nt in selected_page_items(page, "notes", job):
             npts = parse_points(nt.get("digitizer_xml", ""))
             if len(npts) < 2:
                 continue
@@ -1906,6 +1930,15 @@ def build(manifest_path, strict=False, output_path=None):
                       tcolor_to_rgb01(ctext) if ctext else (0, 0, 0),
                       lines, ntext_pt, align, nalpha, NOTE_BORDER_PT,
                       note_ocg[0], h_pad_pt=box_w * NOTE_HPAD_RATIO)
+
+        annotation_bounds, annotation_warnings = render_page_annotations(
+            pdf_page, selected_page_items(page, "annotations", job), to_disp, derot,
+            annotation_layers, tcolor_to_rgb01,
+            include_hidden=True)  # Visibility was handled by selected_page_items.
+        for bounds in annotation_bounds:
+            protect_geometry([bounds.tl, bounds.br])
+        for warning in annotation_warnings:
+            report.append("WARNING %s: %s" % (sheet, warning))
 
         # Legend — white box anchored at a TOP CORNER of the PlanSwift 'Legend'
         # Legend — anchored at the PlanSwift Legend box's top corner, using its
@@ -1987,6 +2020,32 @@ def build(manifest_path, strict=False, output_path=None):
                 rh = max(fs * 1.7, fs * LEGEND_SYMBOL_H_MULT + 2 if any_symbol else 0)
                 return 2 * pad + title_height(fs) + n * rh
 
+            if legend_editor_dir is not None:
+                os.makedirs(legend_editor_dir, exist_ok=True)
+                image_path = os.path.join(str(legend_editor_dir), str(drawing_page_number) + '.png')
+                scale = min(1.0, 1500 / max(disp.width, disp.height))
+                # Live MuPDF page rendering can show newly created selection OCGs
+                # before the final document configuration. Omit only those helper
+                # streams from the reference image and restore them immediately.
+                hidden_streams = {xref: out.xref_stream(xref)
+                                  for page_xref, base, streams in selection_streams
+                                  if page_xref == pdf_page.xref for xref in streams}
+                try:
+                    for xref in hidden_streams:
+                        out.update_stream(xref, b'')
+                    pdf_page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).save(image_path)
+                finally:
+                    for xref, data in hidden_streams.items():
+                        out.update_stream(xref, data)
+                legend_templates[page_key] = dict(
+                    image=image_path, width=disp.width, height=disp.height, sheet=sheet,
+                    bounds=list(takeoff_bounds) if takeoff_bounds is not None else None,
+                    manual=not is_fallback,
+                    rows=[["%s %s" % (r[2], r[3]), r[0].get('ItemName', '')] for r in legend_rows],
+                    metrics=dict(row=row_width_at(1),
+                                 title=fitz.get_text_length('TAKEOFF SUMMARY - ' + sheet, fontname=LEGEND_FONT_BOLD, fontsize=1),
+                                 toolbar=toolbar_width(1), symbols=any_symbol))
+
             if is_fallback:
                 # Measure the title as well as the rows. The entire enclosing
                 # tracing rectangle is protected, including blank gaps inside.
@@ -1999,8 +2058,14 @@ def build(manifest_path, strict=False, output_path=None):
                 def auto_height(fs):
                     return legend_height(fs)
 
-                layout, placement_rule = adaptive_legend_layout(
-                    disp, takeoff_bounds, n, auto_width, auto_height)
+                profile = legend_defaults.get(orientation_of(disp.width, disp.height))
+                layout = preferred_layout(disp, takeoff_bounds, profile, auto_width, auto_height)
+                placement_rule = 'saved-default'
+                if layout is None:
+                    if profile is not None:
+                        report.append('WARNING %s: saved legend area cannot fit safely; automatic placement used.' % sheet)
+                    layout, placement_rule = adaptive_legend_layout(
+                        disp, takeoff_bounds, n, auto_width, auto_height)
                 font_sz = MIN_FONT
                 if layout is not None:
                     font_sz = layout[0]
@@ -2323,7 +2388,7 @@ def build(manifest_path, strict=False, output_path=None):
     # If any page was dropped, warn loudly — a "successful" run must not quietly
     # ship a set that's missing pages.
     warn_missing_sources(skipped)
-    return {"page_titles": page_titles, "page_keys": page_keys,
+    return {"page_titles": page_titles, "page_keys": page_keys, "legend_templates": legend_templates,
             "warnings": [line for line in report if line.startswith("WARNING")]}
 
 
@@ -2332,7 +2397,8 @@ if __name__ == "__main__":
         sys.exit("Usage: python pdf_takeoff_builder.py <manifest.txt>")
     manifest_arg = sys.argv[1]
     try:
-        build(manifest_arg)
+        from pdf_export_picker import load_preferences, default_preferences_path
+        build(manifest_arg, legend_defaults=load_preferences(default_preferences_path()).legend_defaults)
     except SystemExit:
         raise
     except Exception:

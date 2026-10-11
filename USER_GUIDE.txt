@@ -3,9 +3,12 @@ USING TAKEOFF PDF COMMUNITY
 CHOOSE AND ORDER PAGES
 Check pages or folders in the tree; search to find sheets quickly. The selected
 pages panel is the final PDF order. Drag several selected pages together, use the
-order buttons or Restore default order. Drawing only exports the background;
-Visible items and All items determine the takeoff content. Legend and greyscale
-are optional. Greyscale affects the drawing background, not takeoff colors.
+order buttons or Restore default order. Takeoff items and Page items each have
+Visible items, All items and None choices. They are independent: you can export
+annotations without takeoff, or takeoff without page items. Choose None in BOTH
+groups for the background alone. These choices are saved, including on Cancel
+and when returning from preview. Legend and greyscale are optional. Greyscale
+affects the drawing background, not takeoff colors.
 
 PRINT FLAGS
 A Print flag is a saved shortcut for future exports, separate from the current
@@ -35,7 +38,9 @@ INTERACTIVE LEGEND IN THE SAVED PDF
   handles on this drawing; another selection on that drawing is cleared.
 - Hide all / Show all: affect takeoff layers throughout this PDF and clear highlights.
 - Clear highlight: clear highlights for this drawing.
-The base drawing, legend text, dimensions and notes are not takeoff items.
+The base drawing, legend text and page items are not takeoff items. Hide all /
+Show all does not change clouds, stamps, tabs, dimensions, notes or highlighters.
+Their separate PDF layers can be controlled from the reader's Layers panel.
 Selection layers appear in the reader's Layers panel; they are initially off.
 These controls use native PDF layer actions, not PDF JavaScript. The highlight
 is a visual aid, not editable PlanSwift geometry or a way to change quantities.
@@ -53,8 +58,26 @@ The page multiplier badge displays the page's Multiplier property (default 1).
 It does not multiply an already-calculated Qty again in the PDF builder.
 
 LEGEND PLACEMENT
-A PlanSwift page item named exactly Legend supplies the desired box location.
-Otherwise the exporter tries the strip right of the outermost tracing. For up
+A PlanSwift page item named exactly Legend supplies the desired box location
+and always takes priority over saved defaults.
+
+Open Legend defaults from the main window or Preview PDF. The main window
+uses a sample sheet; the preview editor uses the current drawing when it has
+legend entries. Select Landscape or Portrait, enable Use my default, then
+drag the blue area to move it or its lower-right handle to resize. Use a corner
+button to snap the area and set its top/bottom anchor. Choose a preferred text
+size from 6 to 60 points. Save defaults to remember them across community
+projects on this Windows account. Each orientation has its own setting.
+Reset to automatic clears the current orientation when saved.
+
+The area scales with sheet dimensions; font size uses physical PDF points.
+Text may shrink to fit. If the area collides with protected geometry or cannot
+fit, the exporter uses automatic placement and reports the fallback. Changing
+defaults in preview rebuilds the PDF while preserving ordering, removed pages
+and Undo/Redo history. These defaults do not move PlanSwift page objects.
+
+Without a usable saved default, the exporter tries the strip right of the
+outermost tracing. For up
 to five entries wholly above or below the page midpoint, it can widen the top-
 right legend to fit 12-point text if it does not overlap the traced geometry.
 Text shrinks for long descriptions instead of adding rows. When the right-hand
@@ -62,6 +85,20 @@ space cannot fit a legend, a companion legend page is inserted after the drawing
 The multiplier badge moves when needed to avoid the legend or takeoff geometry.
 These checks use exported tracing bounds, not recognition of all printed lines,
 notes or building footprints. Use a PlanSwift Legend box for exact placement.
+
+PAGE ANNOTATIONS
+Page items includes notes, dimensions, highlighters, revision clouds, rubber
+stamps and sticky tabs. Choose Visible items to exclude hidden page objects,
+All items to include them, or None to omit every page-item category.
+Revision clouds export as scalloped outlines without the translucent fill.
+A rubber stamp uses two control points for ONE angled stamp. Sticky tabs use
+the first point as the tip and the second as the tail. Their visible labels
+remain searchable; internal Stored Notes on a sticky tab are not printed.
+Each new annotation type gets a separate PDF layer and its bounds are used
+when avoiding automatic legend/multiplier overlaps. These are PDF graphics,
+not editable native markup objects in the PDF reader.
+Font substitution and uncommon transparency, sizing or timestamp options
+may differ from PlanSwift; the preview Details panel reports approximations.
 
 SOURCE PDF SETUP
 Raster uses PlanSwift's imported TIFF and needs no original source files.

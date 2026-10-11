@@ -1,4 +1,4 @@
-TAKEOFF PDF COMMUNITY - 1.0.1
+TAKEOFF PDF COMMUNITY - 1.1.0
 An independent, unofficial PlanSwift PDF export plugin.
 
 START HERE
@@ -12,15 +12,20 @@ WHAT IT DOES
 - One PDF layer per takeoff item, with clickable eye controls in the legend.
 - Click a legend description to highlight that item's tracing with point markers.
 - Hide all / Show all takeoff layers, plus Clear highlight.
-- Automatic legend placement or placement from the page's PlanSwift Legend box.
+- Visual legend defaults: drag/resize the preferred area and choose text size,
+  separately for landscape and portrait sheets. Existing PlanSwift Legend
+  boxes keep priority; automatic placement remains the safe fallback.
 - Takeoff outlines, fills, hatch patterns, count symbols, dimensions, notes and
-  highlighters; a page-multiplier badge that avoids traced geometry and legends.
+  highlighters, revision cloud outlines, rubber stamps and sticky tabs; a
+  page-multiplier badge that avoids exported geometry and legends.
 - Page tree with search, persistent Print flags, custom export order and defaults.
 - Raster drawing backgrounds, or original source PDFs with sheet-name/page-label
   matching and source checks. Export location can differ from the source folder.
 - Finished-export preview with remembered Thumbnails/List view, multi-selection,
   drag reordering, removal, Undo/Redo, and return to the print window.
-- Drawing only, visible items or all items; optional legend and drawing greyscale.
+- Independent Visible / All / None controls for takeoff items and page items.
+  Choose None in both for background only; optional legend and greyscale.
+- Wider settings scrollbar and stable scrolling when clicking visible options.
 
 COMMUNITY EDITION
 No custom linked-takeoff property is required. Only items owning sections are
@@ -60,4 +65,6 @@ REPOSITORY SOURCE
 The full PlanSwift bridge is included here as:
   Takeoff PDF Community - PlanSwift Script.txt
 Create/import the PlanSwift plugin separately as described in INSTALL.txt.
-This repository contains community 1.0.1, not the newer private-only features.
+Community 1.1.0 includes the shared feature updates from the personal exporter.
+Workflow-specific linked items, filtering and color overrides remain excluded.
+Upgrade both the helpers and the complete PlanSwift script together.

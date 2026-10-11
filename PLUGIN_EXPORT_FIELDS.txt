@@ -3,14 +3,16 @@ EXPORT PLUGIN PACKAGE - SUGGESTED FIELDS
 Plugin Name:
 Takeoff PDF Community
 
-Version: 1     .     0
-Build: 1
-(Release identifier: 1.0.1)
+Version: 1     .     1
+Build: 0
+(Release identifier: 1.1.0)
 
 Description (paste this):
 Independent, open-source PDF exporter for PlanSwift. Export takeoff with searchable
 legend text, clickable layer visibility controls and selection-style highlighting.
-Includes automatic or user-positioned legends, raster/source PDF backgrounds,
+Includes visual legend defaults, native cloud/stamp/tab rendering, independent
+takeoff/page-item choices, automatic or user-positioned legends, raster/source
+PDF backgrounds,
 source sheet checks, a searchable page tree, saved Print flags, custom PDF order,
 and a finished-PDF preview with thumbnails/list view, multi-page dragging, removal
 and Undo. Requires the matching Takeoff PDF Community Python helper ZIP and a
@@ -40,8 +42,8 @@ script does not need embedded image or FolderLocation properties on the plugin.
 Keep all events unencrypted. Review the export contents before the final step.
 
 DISTRIBUTE THESE MATCHING FILES TOGETHER
-- Takeoff-PDF-Community-1.0.1.zip (Python source, installer, docs, tests, demo)
+- Takeoff-PDF-Community-1.1.0.zip (Python source, installer, docs, tests, demo)
 - Takeoff PDF Community - PlanSwift Script.txt (complete editable bridge source)
-- Your exported Takeoff-PDF-Community-1.0.1.SwiftPluginPackage
+- Your exported Takeoff-PDF-Community-1.1.0.SwiftPluginPackage
 The bridge TXT is intentionally excluded from the ZIP at your request. Publish
 it alongside the package so recipients have the complete corresponding source.

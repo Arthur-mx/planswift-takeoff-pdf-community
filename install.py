@@ -11,7 +11,7 @@ import sys
 
 RUNTIME_FILES = ('pdf_takeoff_builder.py', 'pdf_export_picker.py', 'pdf_export_preview.py',
                  'pdf_preview_thumbnails.py', 'pdf_source_paths.py', 'pdf_source_labels.py',
-                 'pdf_section_records.py')
+                 'pdf_section_records.py', 'pdf_legend_defaults.py', 'pdf_page_annotations.py')
 
 
 def installation_root():

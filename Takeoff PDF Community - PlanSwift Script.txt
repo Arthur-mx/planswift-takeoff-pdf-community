@@ -1,6 +1,6 @@
 ﻿// =============================================================================
 // PlanSwift Script: Export Takeoff To PDF (manifest writer + Python launcher)
-// Community edition 1.0.1 - SPDX-License-Identifier: AGPL-3.0-only
+// Community edition 1.1.0 - SPDX-License-Identifier: AGPL-3.0-only
 // Pair:   pdf_export_picker.py (window), pdf_takeoff_builder.py (PDF renderer)
 //
 // Flow:   1. Launch the external page tree/search window; choose PDF content
@@ -16,6 +16,7 @@
 var
   // The external Python window owns all page-tree controls.
   ExportDrawingOnly, ExportAllItems, ExportWithLegend: Boolean;
+  ExportPageItems, ExportAllPageItems: Boolean;
   ExportGreyscale, ExportSourcePDF, ExportPDFLabels: Boolean;
   VisibleTakeoffPages, AllTakeoffPages, CatalogPages: TStringList;
   pickerMarkIDs, pickerMarkValues: TStringList;
@@ -188,9 +189,9 @@ begin
     end else begin
       responseLines.LoadFromFile(pickerResponse);
       responseValid := False;
-      if responseLines.Count >= 11 then begin
+      if responseLines.Count >= 12 then begin
         responseValid := True;
-        if responseLines.Strings[0] <> 'PDF_EXPORT_PICKER_RESULT_V4' then responseValid := False;
+        if responseLines.Strings[0] <> 'PDF_EXPORT_PICKER_RESULT_V5' then responseValid := False;
         if responseLines.Strings[1] <> pickerSession then responseValid := False;
         if responseLines.Strings[responseLines.Count - 1] <> 'END' then responseValid := False;
         if (responseLines.Strings[2] <> 'VISIBLE') and
@@ -205,12 +206,15 @@ begin
            (responseLines.Strings[6] <> 'PREVIEW') and
            (responseLines.Strings[6] <> 'MARKS_ONLY') then responseValid := False;
         if Copy(responseLines.Strings[7], 1, 1) <> '"' then responseValid := False;
-        if responseLines.Strings[8] <> 'PAGES' then responseValid := False;
+        if (responseLines.Strings[8] <> 'VISIBLE') and
+           (responseLines.Strings[8] <> 'ALL') and
+           (responseLines.Strings[8] <> 'NONE') then responseValid := False;
+        if responseLines.Strings[9] <> 'PAGES' then responseValid := False;
         marksIndex := responseLines.IndexOf('MARKS');
-        if (marksIndex < 9) or (marksIndex >= responseLines.Count - 1) then
+        if (marksIndex < 10) or (marksIndex >= responseLines.Count - 1) then
           responseValid := False
         else begin
-          for responseIndex := 9 to marksIndex - 1 do begin
+          for responseIndex := 10 to marksIndex - 1 do begin
             responseGUID := responseLines.Strings[responseIndex];
             if CatalogPages.IndexOf(responseGUID) < 0 then responseValid := False;
             if chosenPages.IndexOf(responseGUID) >= 0 then responseValid := False;
@@ -238,6 +242,8 @@ begin
       if responseValid then begin
         ExportDrawingOnly := responseLines.Strings[2] = 'DRAWING';
         ExportAllItems := responseLines.Strings[2] = 'ALL';
+        ExportPageItems := responseLines.Strings[8] <> 'NONE';
+        ExportAllPageItems := responseLines.Strings[8] = 'ALL';
         ExportWithLegend := responseLines.Strings[3] = '1';
         if ExportDrawingOnly then ExportWithLegend := False;
         ExportGreyscale := responseLines.Strings[4] = '1';
@@ -406,6 +412,7 @@ begin
       dd := GetPropertyFormula(dch, 'DigitizerData');
       if dd = '' then continue;
       WriteM('--- DIMENSION_START ---');
+      WriteM('Visible: ' + Trim(VarToStr(GetPropertyResult(dch, 'Visible'))));
       WriteM('DimGUID: ' + GetResultAsString(dch, 'GUID'));
       WriteM('Color: ' + Trim(VarToStr(GetPropertyResult(dch, 'Color'))));
       WriteM('TextColor: ' + Trim(VarToStr(GetPropertyResult(dch, 'Text Color'))));
@@ -522,6 +529,55 @@ begin
       WriteM(nd);
       WriteM('--- NOTE_END ---');
     end;
+  End;
+end;
+
+// Native page annotations use their original digitizer control points.
+// A RubberStamp has TWO points defining ONE stamp, not two count markers.
+procedure EmitPageAnnotations(pgGUID: String);
+var
+  li: Integer;
+  ach, ad, atype: String;
+begin
+  For li := 0 to ChildCount(pgGUID) - 1 do begin
+    ach := ChildItem(pgGUID, li);
+    if ach = '' then continue;
+    atype := '';
+    if IsType(ach, 'RevisionCloud') then atype := 'RevisionCloud'
+    else if IsType(ach, 'RubberStamp') then atype := 'RubberStamp'
+    else if IsType(ach, 'StickyTab') then atype := 'StickyTab';
+    if atype = '' then continue;
+    ad := GetPropertyFormula(ach, 'DigitizerData');
+    WriteM('--- ANNOTATION_START ---');
+    WriteM('NativeType: ' + atype);
+    WriteM('AnnotationGUID: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'GUID'))));
+    WriteM('Name: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Name'))));
+    WriteM('Visible: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Visible'))));
+    WriteM('OrderIndex: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'OrderIndex'))));
+    WriteM('ZOrder: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'ZOrder'))));
+    WriteM('Transparency: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Transparency'))));
+    WriteM('TimeStampStr: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'TimeStampStr'))));
+    if atype = 'RevisionCloud' then begin
+      WriteM('BorderColor: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'BorderColor'))));
+      WriteM('ShowTimestamp: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'ShowTimestamp'))));
+    end else begin
+      WriteM('PrimaryLabel: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Primary Label'))));
+      WriteM('LabelColor: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Label Color'))));
+      WriteM('ShowTimestamp: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Show Timestamp'))));
+      WriteM('Autosize: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Autosize'))));
+      if atype = 'RubberStamp' then begin
+        WriteM('StampColor: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Stamp Color'))));
+        WriteM('Bordered: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Bordered'))));
+        WriteM('StenciledFont: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'StenciledFont'))));
+        WriteM('ThickerBorder: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Thicker Border'))));
+      end else begin
+        WriteM('TabColor: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Tab Color'))));
+        WriteM('StoredNotes: ' + EncodeNewlines(VarToStr(GetPropertyResult(ach, 'Stored Notes'))));
+      end;
+    end;
+    WriteM('DigitizerData:');
+    WriteM(ad);
+    WriteM('--- ANNOTATION_END ---');
   End;
 end;
 
@@ -850,10 +906,13 @@ begin
       WriteM('LegendDataEnd');
     end;
   end;
-  if not ExportDrawingOnly then begin
+  if ExportPageItems then begin
     EmitDimensions(drawingId);
     EmitHighlighters(drawingId);
     EmitNotes(drawingId);
+    EmitPageAnnotations(drawingId);
+  end;
+  if not ExportDrawingOnly then begin
     recordOffset := 0;
     while recordOffset < TraceCatalog.Count do begin
       includeTrace := TracePageIds.Strings[recordOffset] = drawingId;
@@ -926,6 +985,9 @@ begin
     if ExportSourcePDF then WriteM('BackgroundMode: PDF') else WriteM('BackgroundMode: Raster');
     if ExportPDFLabels then WriteM('SourcePDFMode: Labels') else WriteM('SourcePDFMode: Files');
     ManifestFlag('IncludeLegend', ExportWithLegend);
+    if not ExportPageItems then WriteM('PageItems: NONE')
+    else if ExportAllPageItems then WriteM('PageItems: ALL')
+    else WriteM('PageItems: VISIBLE');
     ManifestFlag('Greyscale', ExportGreyscale);
     EnsureLegendIcons;
     WriteM('LegendIconArea: ' + legIconArea);

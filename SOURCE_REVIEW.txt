@@ -1,4 +1,17 @@
-SOURCE HISTORY AND REPLACEMENT REVIEW - COMMUNITY 1.0.1
+SOURCE HISTORY AND REPLACEMENT REVIEW - COMMUNITY 1.1.0
+
+1.1.0 UPDATE (2026-10-11)
+Ports the PDF-specific visual legend editor, native page-annotation renderer,
+independent content controls and scrolling fixes from the personal exporter.
+The community IndexProjectTraces, WriteTraceRecord, WriteDrawingRecord and
+export-session implementation remain in place; page-item emission is added
+independently of takeoff emission. SectionRecordsV1 and Python-owned quantity
+allocation are retained. No original Excel-export routines or artwork were
+reintroduced. Automated source checks cover the bridge and runtime modules
+for private workflow conventions. The limits of the original review below
+still apply.
+
+ORIGINAL 1.0.1 REVIEW
 Review date: 2026-10-10
 
 RESULT

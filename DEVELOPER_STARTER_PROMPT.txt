@@ -6,7 +6,8 @@ There are two cooperating programs:
 1. The separate "Takeoff PDF Community - PlanSwift Script.txt" runs in PlanSwift's
    limited Pascal-style script engine. It collects pages/items/sections into a
    text manifest and launches external Python windows. It is deliberately NOT
-   inside the helper ZIP. Ask me for the matching TXT if I have not supplied it.
+   inside the helper ZIP, but it is included at repository root. Ask for the
+   matching TXT if working from a ZIP without it.
 2. The Python files in the ZIP render the PDF and own the Tkinter UI. They use
    PyMuPDF and a dedicated Python runtime installed by Install.cmd/install.py at
    %LOCALAPPDATA%\PlanSwift\Takeoff PDF Community. No workstation-specific paths.
@@ -19,6 +20,10 @@ pdf_export_picker.py: searchable page tree, selected-page order, Print flags,
 pdf_export_preview.py: worker, finished-PDF display, grouped order/removal/history,
   atomic save of retained/reordered original PDF pages and return-to-picker state.
 pdf_preview_thumbnails.py: virtualized thumbnail/list canvas, selection and cache.
+pdf_legend_defaults.py: visual normalized-area editor, physical text sizes,
+  per-orientation preferences and collision-safe fallback.
+pdf_page_annotations.py: native cloud/stamp/tab control-point rendering.
+  Cloud outlines only; two stamp points mean one stamp, not two count symbols.
 pdf_source_paths.py + pdf_source_labels.py: safe source matching and validation.
 pdf_section_records.py: normalizes SectionRecordsV1 records into item groups;
   owns parent Qty times section-share allocation, retaining first-seen order.
@@ -47,6 +52,12 @@ Invariants:
   both depend on PlanSwift TIFF dimensions for correct overlay alignment.
 - No silent source-PDF fallback; fail on missing/ambiguous/mislabeled sources.
 - Print flags persist even on Cancel. Preview choices/order survive Back to print.
+- Takeoff and page-item visibility are independent. RESULT_V5 field 8 is
+  VISIBLE/ALL/NONE for page items; PAGES is at field 9 (zero-based).
+  SectionRecordsV1 quantity normalization is still required.
+- PlanSwift Legend boxes outrank saved defaults. Default area coordinates
+  are proportional, text size is in points, and collisions use automatic
+  placement. Preview rebuilds preserve order/removal/history by page_keys.
 - Session request/response text preserves Unicode; do not casually change the
   existing protocol headers or expected exit codes (preview exit 3 means Back).
 - The embedded PlanSwift engine is NOT full Delphi. Native tree widgets and

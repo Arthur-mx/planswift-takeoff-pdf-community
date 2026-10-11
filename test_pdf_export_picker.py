@@ -116,7 +116,7 @@ class ProtocolTests(unittest.TestCase):
             p.write_result(result, p.SelectionModel(data), True, False, 'PDF', source_root=source)
             lines = result.read_bytes().decode('ascii').splitlines()
             self.assertEqual(json.loads(lines[7]), source)
-            self.assertEqual(lines[8], 'PAGES')
+            self.assertEqual(lines[8:10], ['VISIBLE', 'PAGES'])
 
     def test_old_script_gets_actionable_update_message(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -132,7 +132,7 @@ class ProtocolTests(unittest.TestCase):
             model.sort_order('reverse')
             p.write_result(path, model, True, True, 'PDF_LABELS')
             lines = path.read_text().splitlines()
-            self.assertEqual(lines[5:], ['PDF_LABELS', 'EXPORT', '""', 'PAGES', 'd', 'c', 'a', 'MARKS', 'END'])
+            self.assertEqual(lines[5:], ['PDF_LABELS', 'EXPORT', '""', 'VISIBLE', 'PAGES', 'd', 'c', 'a', 'MARKS', 'END'])
 
     def test_utf16_catalog_preserves_unicode_hierarchy_and_flags(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -164,7 +164,7 @@ class ProtocolTests(unittest.TestCase):
             p.write_result(path, model, True, False, 'PDF')
             self.assertEqual(path.read_bytes().decode('ascii').splitlines(),
                              [p.RESULT_HEADER, 'session-123', 'DRAWING', '0', '0', 'PDF',
-                              'EXPORT', '""', 'PAGES', 'b', 'MARKS', 'END'])
+                              'EXPORT', '""', 'VISIBLE', 'PAGES', 'b', 'MARKS', 'END'])
             self.assertFalse(path.with_suffix('.txt.pending').exists())
             original = path.read_bytes()
             with patch.object(p.os, 'replace', side_effect=OSError('disk error')):
@@ -244,6 +244,45 @@ class WidgetTests(unittest.TestCase):
             pass
         self.temp.cleanup()
         self.assertEqual(self.callback_errors, [])
+
+    def test_page_items_are_independent_and_saved_on_cancel(self):
+        ui = self.ui
+        ui.mode.set('DRAWING')
+        ui.change_mode()
+        ui.page_items.set('ALL')
+        self.assertIn('disabled', ui.legend_check.state())
+        ui.cancel()
+        saved = p.load_preferences(self.preferences_path)
+        self.assertEqual(saved.content, 'DRAWING')
+        self.assertEqual(saved.page_items, 'ALL')
+        self.ui = restored = p.PickerWindow(catalog(), self.result, self.preferences_path)
+        restored.root.withdraw()
+        self.assertEqual(restored.page_items.get(), 'ALL')
+        self.assertEqual(restored.mode.get(), 'DRAWING')
+
+    def test_page_items_survive_preview_return(self):
+        ui = self.ui
+        ui.state_path = Path(self.temp.name) / 'session.json'
+        ui.page_items.set('NONE')
+        ui.mode.set('ALL')
+        ui.change_mode()
+        ui.save_session()
+        ui.page_items.set('VISIBLE')
+        ui.mode.set('DRAWING')
+        ui.restore_session()
+        self.assertEqual(ui.page_items.get(), 'NONE')
+        self.assertEqual(ui.mode.get(), 'ALL')
+
+    def test_annotation_only_preview_handoff_keeps_page_items_and_no_legend(self):
+        ui = self.ui
+        ui.mode.set('DRAWING')
+        ui.change_mode()
+        ui.page_items.set('VISIBLE')
+        ui.accept('PREVIEW')
+        lines = self.result.read_text().splitlines()
+        self.assertEqual(lines[0], 'PDF_EXPORT_PICKER_RESULT_V5')
+        self.assertEqual(lines[2:4], ['DRAWING', '0'])
+        self.assertEqual(lines[6:10], ['PREVIEW', '\"\"', 'VISIBLE', 'PAGES'])
 
     def test_keyboard_toggle_changes_selection_and_counts(self):
         ui = self.ui
@@ -373,6 +412,54 @@ class WidgetTests(unittest.TestCase):
             ui.mark_help_button.invoke()
         self.assertIn('Hold Ctrl', show.call_args.args[1])
         self.assertIn('unflag', show.call_args.args[1])
+
+    def test_settings_scrollbar_is_three_times_the_normal_width(self):
+        ui = self.ui
+        ui.root.attributes('-alpha', 0.0)
+        ui.root.deiconify()
+        ui.root.update()
+        self.assertEqual(ui.settings_scrollbar.winfo_width(),
+                         ui.settings_scrollbar.winfo_reqwidth() * 3)
+
+    def test_focus_on_visible_page_item_does_not_scroll_settings(self):
+        ui = self.ui
+        ui.root.attributes('-alpha', 0.0)
+        ui.root.deiconify()
+        ui.root.geometry('940x650')
+        ui.root.update()
+        ui.root.focus_force()
+        ui.search_entry.focus_set()
+        ui.root.update()
+        ui.settings_canvas.yview_moveto(0)
+        ui.root.update()
+        page_group = next(w for w in ui.settings_content.winfo_children()
+                          if w.cget('text') == 'Page items')
+        radio = next(w for w in page_group.winfo_children()
+                     if w.winfo_class() == 'TRadiobutton')
+        before = ui.settings_canvas.yview()
+        self.assertLess(radio.winfo_rooty() + radio.winfo_height(),
+                        ui.settings_canvas.winfo_rooty() + ui.settings_canvas.winfo_height())
+        radio.focus_set()
+        ui.root.update()
+        self.assertEqual(ui.settings_canvas.yview(), before)
+
+    def test_focus_still_reveals_setting_below_fold(self):
+        ui = self.ui
+        ui.root.attributes('-alpha', 0.0)
+        ui.root.deiconify()
+        ui.root.geometry('940x650')
+        ui.root.update()
+        ui.root.focus_force()
+        ui.search_entry.focus_set()
+        ui.root.update()
+        ui.settings_canvas.yview_moveto(0)
+        ui.root.update()
+        ui.mark_help_button.focus_set()
+        ui.root.update()
+        self.assertGreater(ui.settings_canvas.yview()[0], 0)
+        self.assertGreaterEqual(ui.mark_help_button.winfo_rooty(), ui.settings_canvas.winfo_rooty())
+        self.assertLessEqual(ui.mark_help_button.winfo_rooty() + ui.mark_help_button.winfo_height(),
+                             ui.settings_canvas.winfo_rooty() + ui.settings_canvas.winfo_height())
 
     def test_scroll_exposes_complete_shortcut_hint_at_minimum_window_height(self):
         ui = self.ui
@@ -526,7 +613,7 @@ class WidgetTests(unittest.TestCase):
         self.assertIn('disabled', ui.export_button.state())
         ui.save_marks_only()
         lines = self.result.read_text().splitlines()
-        self.assertEqual(lines[6:], ['MARKS_ONLY', '""', 'PAGES', 'MARKS', 'a', '1', 'd', '1', 'END'])
+        self.assertEqual(lines[6:], ['MARKS_ONLY', '""', 'VISIBLE', 'PAGES', 'MARKS', 'a', '1', 'd', '1', 'END'])
 
     def test_clear_marks_undo_and_select_marked(self):
         ui = self.ui
@@ -552,7 +639,7 @@ class WidgetTests(unittest.TestCase):
         ui.cancel()
         self.assertTrue(ui.accepted)
         self.assertEqual(self.result.read_text().splitlines()[6:],
-                         ['MARKS_ONLY', '""', 'PAGES', 'MARKS', 'a', '1', 'c', '0', 'END'])
+                         ['MARKS_ONLY', '""', 'VISIBLE', 'PAGES', 'MARKS', 'a', '1', 'c', '0', 'END'])
 
     def test_titlebar_close_saves_flags_through_same_path_as_cancel(self):
         ui = self.ui
